@@ -1,0 +1,19 @@
+\documentclass{standalone}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning}
+
+\begin{document}
+\begin{tikzpicture}[>=Stealth, line width=1.2pt, every node/.style={draw, circle, minimum size=1cm}]
+
+
+  % Nodes
+  \node (L) {$L$};
+  \node (X) [left=1cm of L]  {$X$};
+  \node (Y) [right=1cm of L] {$Y$};
+
+  % Edges
+  \draw[->] (L)  -- (X);
+  \draw[->] (L)  -- (Y);
+
+\end{tikzpicture}
+\end{document}

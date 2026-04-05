@@ -1,0 +1,27 @@
+\documentclass{standalone}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning}
+
+\begin{document}
+\begin{tikzpicture}[>=Stealth, line width=1.2pt, every node/.style={draw, circle, minimum size=1cm}]
+
+  % Middle level
+  \node (W) {$W$};
+  \node (X) [below=1cm of W] {$X$};
+  \node (Y) [below=1cm of X] {$Y$};
+  \node[double] (Z) [right=1cm of X] {$Z$};
+
+  % Compression variable
+
+  \node (C) [left=1cm of X] {$C$};
+
+  % Edges
+  \draw[->] (W)  -- (Z);
+  \draw[->] (X)  -- (Z);
+  \draw[->] (Y)  -- (Z);
+
+  \draw[->] (C)  -- (X);
+  \draw[->] (C)  -- (Y);
+
+\end{tikzpicture}
+\end{document}
