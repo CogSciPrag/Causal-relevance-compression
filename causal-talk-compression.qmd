@@ -1,6 +1,8 @@
 ---
 title: "Causal talk as optimal compression"
-format: html
+format:
+  html:
+    embed-resources: true
 "[quarto]": {
   "editor.wordWrap": "on",
   "editor.formatOnSave": false
@@ -377,6 +379,7 @@ net_chain <- CBN(
     )
   )
 )
+
 
 cMIs_chain <- c(
   "X=1" = cMI(net_chain, list("X"  = "1"), "Z", prior = "marginal"),

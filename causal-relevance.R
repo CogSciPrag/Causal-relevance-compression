@@ -362,7 +362,8 @@ MI.cbn <- function(x, x_var, y_var, base = exp(1), ...) {
 #   cMI(net, c(X = "x1"), "Y")                        # X vs Y after hard do(X=x1)
 # ------------------------------------------------------------------------------
 
-cMI <- function(x, intervention, y_var, prior = "marginal", base = exp(1)) {
+cMI <- function(x, intervention, y_var, prior = "marginal", base = exp(1),
+                changePriorVars = NULL, propensity = NULL) {
 
   # --- determine cause variable ------------------------------------------------
   if (is.list(intervention)) {
@@ -374,7 +375,24 @@ cMI <- function(x, intervention, y_var, prior = "marginal", base = exp(1)) {
     x_var <- var_names
   }
 
-  intervened_net <- intervene(x, intervention, prior = prior)
+  # --- optional: change priors via soft pre-intervention + changePrior ---------
+  # 'changePriorVars' is a named list var -> focal_value (same format as
+  # changePrior's 'vars' in propensity mode).
+  # Flow:
+  #   1. Case-2 (soft) intervention on changePriorVars: cuts their ties, making
+  #      them independent root nodes with their current marginal as prior.
+  #   2. changePrior with propensity: mixes each marginal with a degenerate prior
+  #      on the focal value.
+  #   3. Case-3 (set) intervention then sees the updated marginals when it
+  #      computes the compression prior via joint().
+  if (!is.null(changePriorVars)) {
+    if (is.null(propensity))
+      stop("cMI: 'propensity' must be supplied when 'changePriorVars' is given")
+    x <- intervene(x, names(changePriorVars))          # step 1: case-2 soft intervention
+    x <- changePrior(x, changePriorVars, propensity = propensity)  # step 2
+  }
+
+  intervened_net <- intervene(x, intervention, prior = prior)  # step 3
   MI(intervened_net, x_var, y_var, base = base)
 }
 
