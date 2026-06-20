@@ -986,3 +986,80 @@ cMIS <- c(
 )
 
 # speaker(cMIS, alpha = 5)
+
+##################################################
+## Irish passports
+##################################################
+
+passport <- CBN(
+  exogenous = list(
+    Country = c(DE = 0.3, IR = 0.2, US = 0.5)
+  ),
+  endogenous = list(
+    Passport = tribble(
+      ~Country , ~Passport , ~prob ,
+      "DE"     , "DE"      , 1.00  ,
+      "DE"     , "IR"      , 0.00  ,
+      "DE"     , "US"      , 0.00  ,
+      "IR"     , "DE"      , 0.00  ,
+      "IR"     , "IR"      , 1.00  ,
+      "IR"     , "US"      , 0.0   ,
+      "US"     , "DE"      , 0.00  ,
+      "US"     , "IR"      , 0.00  ,
+      "US"     , "US"      , 1.00
+    ),
+    Passport_EU = tribble(
+      ~Country , ~Passport_EU , ~prob ,
+      "DE"     , "EU"      , 1.00  ,
+      "DE"     , "nEU"     , 0.00  ,
+      "IR"     , "EU"      , 1.00  ,
+      "IR"     , "nEU"     , 0.00  ,
+      "US"     , "EU"      , 0.00  ,
+      "US"     , "nEU"     , 1.00  
+    ),
+    Passport_IR = tribble(
+      ~Country , ~Passport_IR , ~prob ,
+      "DE"     , "IR"      , 0.00  ,
+      "DE"     , "nIR"     , 1.00  ,
+      "IR"     , "IR"      , 1.00  ,
+      "IR"     , "nIR"     , 0.00  ,
+      "US"     , "IR"      , 0.00  ,
+      "US"     , "nIR"     , 1.00  
+    )
+  )
+)
+
+
+
+results = c(
+IR_EU = cMI(
+  passport,
+  list(Country = c("IR")),
+  "Passport_EU",
+  prior = "flat"
+  ),
+EU_EU = cMI(
+  passport,
+  list(Country = c("DE", "IR")),
+  "Passport_EU",
+  prior = "flat"
+  ),
+IR_IR = cMI(
+  passport,
+  list(Country = c("IR")),
+  "Passport_IR",
+  prior = "flat"
+),
+EU_IR = cMI(
+  passport,
+  list(Country = c("DE", "IR")),
+  "Passport_IR",
+  prior = "flat"
+)
+)
+
+tibble(description = names(results), cMI = results) |>
+  ggplot(aes(x = description, y = cMI)) +
+  geom_col() +
+  labs(x = "Description", y = "Causal MI")
+

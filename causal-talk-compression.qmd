@@ -14,8 +14,10 @@ format:
 ## Causal talk and optimization
 
 This work treats causal talk — linguistic descriptions of causal relationships — as a form of *optimal compression*.
-The framing is analogous to the rate-distortion and information-bottleneck problems in information theory (but the precise model assumed here is not exactly the same): a speaker observing a causal process must encode it into a finite, structured linguistic message, and we ask what message a rational sender should choose.
-The core claim is that this choice is governed by a soft-optimization over how much causally relevant information the signal conveys, discounted by the representational cost of the signal.
+The framing is analogous to the rate-distortion and information-bottleneck problems in information theory (but the precise model assumed here is not exactly the same).
+We assume that a speaker observing a causal process must encode it into a linguistic message, which is then transmitted to a receiver.
+The sender should optimize their choices of (linguistic) message in the sense that the receiver should be able to recover as much *relevant* information as possible.
+Consequently, we approach causal talk as an optimization problem where a speaker's choice is governed by a soft-optimization over how much causally relevant information a given signal conveys, discounted by the representational cost of the signal.
 
 We work with the simplifying assumption that causal Bayes nets (CBNs) are adequate representations of both the true causal process and agents' mental models thereof. 
 The full communicative picture runs: the true causal process shapes the sender's mental model (a CBN), which is compressed into a linguistic signal, which updates the receiver's mental model, which in turn guides the receiver's actions as they engage with the true causal process.
@@ -39,12 +41,12 @@ That is, which causes agents prefer to cite, and how they linguistically frame t
 
 We propose that *causal relevance* — the degree to which a cause $C$ matters for an effect $E$ — is well-characterized by *causal mutual information* (cMI).
 To begin with, we consider $E$ as the given topic of interest.
-The approach can be generalized to include the speaker's choice of which effect to report given an event or which pair cause and even to communicate.
+The approach can be generalized to include the speaker's choice of which effect to report given an event or which pair of cause and event to communicate.
 But we don't explore this here.
 
 The main justification is predictive: rankings of causes by cMI align with empirical judgements of causal selection and description across a range of experimental scenarios.
 
-cMI is defined by analogy with standard mutual information, but replaces the observational joint with an interventional one:
+For single variables and their (singleton) values (see below for a generalization), cMI is defined by analogy with standard mutual information, but replaces the observational joint with an interventional one:
 
 $$
 cMI(C,E) = \sum_{c,e} \textcolor{#C65353}{Q(C=c)} \ P(E=e \mid do(C=c)) \ \log \frac{P(E=e \mid do(C=c))}{P(E = e)}
@@ -52,19 +54,19 @@ $$
 
 For each value $c$, the contribution is the KL divergence between the post-intervention distribution $P(E \mid do(C=c))$ and the unintervened marginal $P(E)$, weighted by a prior $\textcolor{#C65353}{Q(C=c)}$ over interventions.
 The *do*-operator cuts all incoming edges to $C$ in the CBN, so the conditional $P(E \mid do(C=c))$ reflects the purely downstream effect of fixing $C=c$, free of confounding.
-Standard (observational) MI is recovered when under special conditions, such as when all variables in $C$ are exogenous variables or when $P$ is causally upstream of $C$.
+Standard (observational) MI is recovered under special conditions, such as when all variables in $C$ are exogenous variables or when $P$ is causally upstream of $C$.
 
 
 The prior $\textcolor{#C65353}{Q}$ determines how interventions are weighted and has no single canonical choice (see Pocheville et al.
 2027). Three salient options from the literature are:
 
 -   **Flat / max-entropy:** $\textcolor{#C65353}{Q(C=c)} = \textcolor{#C65353}{Q(C=c')}$ for all $c, c'$ — all cause values are treated equally, regardless of their natural frequency.
--   **Strongest difference-making / max. specificity:** $\textcolor{#C65353}{Q}$ is chosen to maximize $cI(C,E)$ — focuses weight on the interventions that produce the largest divergence from the baseline effect distribution.
+-   **Strongest difference-making / max. specificity:** $\textcolor{#C65353}{Q}$ is chosen to maximize $cMI(C,E)$ — focuses weight on the interventions that produce the largest divergence from the baseline effect distribution.
 -   **Empirical distribution:** $\textcolor{#C65353}{Q(C=c)} = P(C=c)$ — weights each intervention by how often the cause naturally takes that value.
 
 Here, we will use the intervention prior to implement common assumptions on human (counterfactual) mental sampling, namely that prescriptive norms (Knobe) and what actually happened (Lucas) are taken into account by tendentially upsampling the prescriptively correct and the actual values of relevant variables.
 
-## Causal talk as optimal compression
+## Causal talk as optimal compression: The intuitive picture
 
 To make the compression picture concrete, consider a sender whose mental model is a CBN with three cause variables $U$, $X$, $Y$ each contributing to a binary effect $Z$.
 The cause variables may be fine-grained — e.g., $X$ ranges over $\{x_1, \ldots, x_n\}$ with $n > 2$ — while $Z$ is binary in the following.
@@ -91,7 +93,7 @@ Concretely, suppose that we want to represent the meaning of "$Z=1$ because $X \
 2. introduce a new parent variable (the compression variable $C$) which implements the (binary, nomological) relationship of belonging to the state described by the expression "$X \in \{x_i, x_j\}$ and $Y = y_k$" or not;
 3. compute the causal mutual information (which now reduces to the mutual information!) between $C$ and the effect variable.
 
-As the last step, essentially marginalizes over all other variables and values, we can think of this as a compression, obtained by pruning and lumping of variables to result in a very condensed CBN representation that only contains $C$ and $Z$. 
+As the last step essentially marginalizes over all other variables and values, we can think of this as a compression, obtained by pruning and lumping of variables to result in a very condensed CBN representation that only contains $C$ and $Z$. 
 This is also illustrated in the pictures below (and it is exactly what's implemented in the code base (see followin sections)):
 
 ::: {#fig-compression layout="[2,3,2]" layout-valign="center" style="column-gap: 2em;"}
@@ -104,8 +106,12 @@ This is also illustrated in the pictures below (and it is exactly what's impleme
 Causal compression in three steps.
 :::
 
-The listener's working mental model is then the last picture in this sequence: a single upstream compression node causing $Z$ directly, bypassing the fine-grained cause structure.
+The listener's working mental model is then the last picture in this sequence: a single upstream compression node causing $Z$ directly, bypassing the fine-grained causal structure.
 This compressed model is adequate for downstream decision-making precisely to the extent that the message has preserved the causally relevant information about $Z$ — i.e., to the extent that cMI is high.
+
+# A formal representation language for causal talk as optimal compression
+
+
 
 # Code & examples
 
