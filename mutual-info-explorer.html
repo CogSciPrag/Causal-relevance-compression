@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Mutual Information Explorer</title>
+  <style>
+    body { font-family: monospace; max-width: 860px; margin: 2em auto; padding: 0 1em; }
+    h1 { font-size: 1.3em; }
+    h2 { font-size: 1em; margin-top: 1.5em; }
+
+    .dim-controls { display: flex; gap: 2em; align-items: center; margin-top: 0.5em; }
+    .dim-controls label { font-size: 0.9em; }
+    .dim-controls select { font-family: monospace; font-size: 0.9em; }
+
+    #knob-grid {
+      display: grid;
+      align-items: center;
+      justify-items: center;
+      gap: 6px;
+      margin-top: 0.5em;
+    }
+    .kg-header { font-weight: bold; font-size: 0.9em; }
+    .knob-cell { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    svg.knob { cursor: ns-resize; display: block; user-select: none; }
+    .knob-val { font-size: 0.85em; }
+
+    table { border-collapse: collapse; margin-top: 0.5em; }
+    th, td { border: 1px solid #888; padding: 0.4em 0.8em; text-align: center; }
+    th { background: #f0f0f0; }
+    td.marginal { background: #f8f8f8; font-style: italic; }
+    .entropy-table { border-collapse: collapse; margin-top: 0.5em; }
+    .entropy-table td, .entropy-table th { border: 1px solid #888; padding: 0.35em 0.8em; }
+    .entropy-table th { background: #f0f0f0; text-align: left; }
+    .entropy-table td { text-align: right; }
+    .zero-warn { color: #c00; font-size: 0.85em; margin-top: 0.5em; }
+  </style>
+</head>
+<body>
+
+<h1>Mutual Information Explorer</h1>
+<p>Drag knobs up/down (or scroll) to set unnormalized joint weights. Everything updates in real time.</p>
+
+<h2>Variable dimensions</h2>
+<div class="dim-controls">
+  <label>|X| (rows):
+    <select id="sel-nx">
+      <option value="2" selected>2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+      <option value="5">5</option>
+      <option value="6">6</option>
+    </select>
+  </label>
+  <label>|Y| (columns):
+    <select id="sel-ny">
+      <option value="2" selected>2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+      <option value="5">5</option>
+      <option value="6">6</option>
+    </select>
+  </label>
+</div>
+
+<h2>Weights (unnormalized)</h2>
+<div id="knob-grid"></div>
+
+<h2>Joint probability table P(X, Y)</h2>
+<table id="prob-table"></table>
+
+<h2>Entropies</h2>
+<table class="entropy-table">
+  <tbody>
+    <tr><th>H(X)</th>    <td id="hx">—</td>        <td>marginal entropy of X</td></tr>
+    <tr><th>H(Y)</th>    <td id="hy">—</td>        <td>marginal entropy of Y</td></tr>
+    <tr><th>H(X, Y)</th> <td id="hxy">—</td>       <td>joint entropy</td></tr>
+    <tr><th>H(X | Y)</th><td id="hx_y">—</td>      <td>conditional entropy of X given Y</td></tr>
+    <tr><th>H(Y | X)</th><td id="hy_x">—</td>      <td>conditional entropy of Y given X</td></tr>
+    <tr><th>I(X ; Y)</th><td id="mi-output">—</td> <td>mutual information</td></tr>
+  </tbody>
+</table>
+<div id="zero-warn" class="zero-warn"></div>
+
+<script>
+  // ── Knob geometry ─────────────────────────────────────────────────────────────
+  // Angles are degrees clockwise from 12 o'clock.
+  // Knob sweeps -135° (7 o'clock) → +135° (5 o'clock) = 270° total.
+  const CX = 40, CY = 40, R = 24;
+  const START_DEG = -135, SWEEP = 270;
+
+  function knobXY(deg) {
+    const rad = (deg - 90) * Math.PI / 180;
+    return [CX + R * Math.cos(rad), CY + R * Math.sin(rad)];
+  }
+
+  function arcPath(a1, a2) {
+    const [sx, sy] = knobXY(a1);
+    const [ex, ey] = knobXY(a2);
+    const large = Math.abs(a2 - a1) > 180 ? 1 : 0;
+    return `M ${sx.toFixed(2)} ${sy.toFixed(2)} A ${R} ${R} 0 ${large} 1 ${ex.toFixed(2)} ${ey.toFixed(2)}`;
+  }
+
+  // ── State ─────────────────────────────────────────────────────────────────────
+  let nX = 2, nY = 2;
+  let values = {};  // key "i_j" -> number in [0, 1]
+
+  function key(i, j)  { return `${i}_${j}`; }
+  function allKeys()  {
+    const ks = [];
+    for (let i = 0; i < nX; i++)
+      for (let j = 0; j < nY; j++)
+        ks.push(key(i, j));
+    return ks;
+  }
+
+  // Preserve values for cells that already exist; default new cells to 0.5.
+  function syncValues() {
+    const next = {};
+    for (let i = 0; i < nX; i++)
+      for (let j = 0; j < nY; j++) {
+        const k = key(i, j);
+        next[k] = (k in values) ? values[k] : 0.50;
+      }
+    values = next;
+  }
+
+  // ── DOM helpers ───────────────────────────────────────────────────────────────
+  function mkEl(tag, cls) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    return e;
+  }
+  function mkTh(text, cls) {
+    const th = document.createElement("th");
+    if (cls) th.className = cls;
+    th.textContent = text;
+    return th;
+  }
+  function mkTd(id, cls) {
+    const td = document.createElement("td");
+    if (id)  td.id = id;
+    if (cls) td.className = cls;
+    td.textContent = "—";
+    return td;
+  }
+
+  // ── Build knob grid ───────────────────────────────────────────────────────────
+  function buildKnobGrid() {
+    const grid = document.getElementById("knob-grid");
+    grid.innerHTML = "";
+    grid.style.gridTemplateColumns = `60px repeat(${nY}, 95px)`;
+
+    // header row
+    grid.appendChild(mkEl("div"));
+    for (let j = 0; j < nY; j++) {
+      const d = mkEl("div", "kg-header");
+      d.textContent = `Y = ${j}`;
+      grid.appendChild(d);
+    }
+
+    // one row per X value
+    for (let i = 0; i < nX; i++) {
+      const rh = mkEl("div", "kg-header");
+      rh.textContent = `X = ${i}`;
+      grid.appendChild(rh);
+
+      for (let j = 0; j < nY; j++) {
+        const k    = key(i, j);
+        const cell = mkEl("div", "knob-cell");
+
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("class", "knob");
+        svg.setAttribute("id", "k" + k);
+        svg.setAttribute("width", "80");
+        svg.setAttribute("height", "80");
+        cell.appendChild(svg);
+
+        const span = mkEl("span", "knob-val");
+        span.id = "kv" + k;
+        cell.appendChild(span);
+
+        grid.appendChild(cell);
+      }
+    }
+
+    allKeys().forEach(initKnobSVG);
+  }
+
+  // ── Knob SVG init & refresh ───────────────────────────────────────────────────
+  function initKnobSVG(k) {
+    const ns  = "http://www.w3.org/2000/svg";
+    const svg = document.getElementById("k" + k);
+    svg.innerHTML = "";
+
+    const body = document.createElementNS(ns, "circle");
+    body.setAttribute("cx", CX); body.setAttribute("cy", CY); body.setAttribute("r", 34);
+    body.setAttribute("fill", "#e0e0e0");
+    body.setAttribute("stroke", "#999"); body.setAttribute("stroke-width", "1.5");
+    svg.appendChild(body);
+
+    const track = document.createElementNS(ns, "path");
+    track.setAttribute("d", arcPath(START_DEG, START_DEG + SWEEP));
+    track.setAttribute("stroke", "#bbb"); track.setAttribute("stroke-width", "5");
+    track.setAttribute("fill", "none"); track.setAttribute("stroke-linecap", "round");
+    svg.appendChild(track);
+
+    const fill = document.createElementNS(ns, "path");
+    fill.setAttribute("class", "fill");
+    fill.setAttribute("stroke", "#4a90d9"); fill.setAttribute("stroke-width", "5");
+    fill.setAttribute("fill", "none"); fill.setAttribute("stroke-linecap", "round");
+    svg.appendChild(fill);
+
+    const dot = document.createElementNS(ns, "circle");
+    dot.setAttribute("class", "indicator");
+    dot.setAttribute("r", "4"); dot.setAttribute("fill", "#222");
+    svg.appendChild(dot);
+
+    svg.addEventListener("mousedown", e => {
+      dragging = k; dragY0 = e.clientY; dragV0 = values[k];
+      e.preventDefault();
+    });
+    svg.addEventListener("wheel", e => {
+      e.preventDefault();
+      const now = Date.now();
+      if (now - (scrollLast[k] || 0) < 120) return;
+      scrollLast[k] = now;
+      values[k] = clamp01(values[k] + (e.deltaY < 0 ? 0.05 : -0.05));
+      refreshKnob(k);
+      update();
+    }, { passive: false });
+
+    refreshKnob(k);
+  }
+
+  function refreshKnob(k) {
+    const v     = values[k];
+    const angle = START_DEG + v * SWEEP;
+    const svg   = document.getElementById("k" + k);
+    if (!svg) return;
+
+    svg.querySelector(".fill").setAttribute("d",
+      v > 0.001 ? arcPath(START_DEG, angle) : "");
+
+    const [ix, iy] = knobXY(angle);
+    const dot = svg.querySelector(".indicator");
+    dot.setAttribute("cx", ix.toFixed(2));
+    dot.setAttribute("cy", iy.toFixed(2));
+
+    document.getElementById("kv" + k).textContent = v.toFixed(2);
+  }
+
+  // ── Build probability table ───────────────────────────────────────────────────
+  function buildProbTable() {
+    const table = document.getElementById("prob-table");
+    table.innerHTML = "";
+
+    const thead   = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    headRow.appendChild(document.createElement("th"));
+    for (let j = 0; j < nY; j++) headRow.appendChild(mkTh(`Y = ${j}`));
+    headRow.appendChild(mkTh("P(X)", "marginal"));
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+
+    for (let i = 0; i < nX; i++) {
+      const tr = document.createElement("tr");
+      tr.appendChild(mkTh(`X = ${i}`));
+      for (let j = 0; j < nY; j++) tr.appendChild(mkTd("p" + key(i, j)));
+      tr.appendChild(mkTd("px" + i, "marginal"));
+      tbody.appendChild(tr);
+    }
+
+    // P(Y) footer row
+    const pyRow = document.createElement("tr");
+    pyRow.appendChild(mkTh("P(Y)", "marginal"));
+    for (let j = 0; j < nY; j++) pyRow.appendChild(mkTd("py" + j, "marginal"));
+    pyRow.appendChild(document.createElement("td"));
+    tbody.appendChild(pyRow);
+
+    table.appendChild(tbody);
+  }
+
+  // ── Drag interaction ──────────────────────────────────────────────────────────
+  let dragging = null, dragY0 = 0, dragV0 = 0;
+  const scrollLast = {};  // key -> timestamp of last processed scroll event
+
+  function clamp01(x) { return Math.min(1, Math.max(0, Math.round(x * 20) / 20)); }
+
+  document.addEventListener("mousemove", e => {
+    if (!dragging) return;
+    values[dragging] = clamp01(dragV0 + (dragY0 - e.clientY) / 150);
+    refreshKnob(dragging);
+    update();
+  });
+  document.addEventListener("mouseup", () => { dragging = null; });
+
+  // ── MI / entropy computation ──────────────────────────────────────────────────
+  function fmt(x)  { return x.toFixed(4); }
+  function bits(p) { return p > 0 ? -p * Math.log2(p) : 0; }
+
+  function update() {
+    const ks    = allKeys();
+    const w     = ks.map(k => values[k]);
+    const total = w.reduce((s, v) => s + v, 0);
+
+    if (total === 0) {
+      document.getElementById("zero-warn").textContent =
+        "All weights are zero — set at least one above 0.";
+      ks.forEach(k => {
+        const cell = document.getElementById("p" + k);
+        if (cell) cell.textContent = "—";
+      });
+      for (let i = 0; i < nX; i++) document.getElementById("px" + i).textContent = "—";
+      for (let j = 0; j < nY; j++) document.getElementById("py" + j).textContent = "—";
+      ["hx","hy","hxy","hx_y","hy_x","mi-output"].forEach(id =>
+        document.getElementById(id).textContent = "—");
+      return;
+    }
+    document.getElementById("zero-warn").textContent = "";
+
+    // normalised joint probabilities
+    const p = {};
+    ks.forEach((k, idx) => p[k] = w[idx] / total);
+
+    // marginals
+    const px = Array(nX).fill(0);
+    const py = Array(nY).fill(0);
+    for (let i = 0; i < nX; i++)
+      for (let j = 0; j < nY; j++) {
+        px[i] += p[key(i, j)];
+        py[j] += p[key(i, j)];
+      }
+
+    // update probability table
+    for (let i = 0; i < nX; i++) {
+      for (let j = 0; j < nY; j++)
+        document.getElementById("p" + key(i, j)).textContent = fmt(p[key(i, j)]);
+      document.getElementById("px" + i).textContent = fmt(px[i]);
+    }
+    for (let j = 0; j < nY; j++)
+      document.getElementById("py" + j).textContent = fmt(py[j]);
+
+    // entropies
+    const hx   = px.reduce((s, v) => s + bits(v), 0);
+    const hy   = py.reduce((s, v) => s + bits(v), 0);
+    const hxy  = ks.reduce((s, k) => s + bits(p[k]), 0);
+    const hx_y = hxy - hy;
+    const hy_x = hxy - hx;
+    const mi   = hx - hx_y;
+
+    document.getElementById("hx").textContent        = fmt(hx)               + " bits";
+    document.getElementById("hy").textContent        = fmt(hy)               + " bits";
+    document.getElementById("hxy").textContent       = fmt(hxy)              + " bits";
+    document.getElementById("hx_y").textContent      = fmt(Math.max(0, hx_y)) + " bits";
+    document.getElementById("hy_x").textContent      = fmt(Math.max(0, hy_x)) + " bits";
+    document.getElementById("mi-output").textContent = fmt(Math.max(0, mi))   + " bits";
+  }
+
+  // ── Rebuild on dimension change ───────────────────────────────────────────────
+  function rebuild() {
+    syncValues();
+    buildKnobGrid();
+    buildProbTable();
+    update();
+  }
+
+  document.getElementById("sel-nx").addEventListener("change", e => {
+    nX = parseInt(e.target.value); rebuild();
+  });
+  document.getElementById("sel-ny").addEventListener("change", e => {
+    nY = parseInt(e.target.value); rebuild();
+  });
+
+  // ── Boot ──────────────────────────────────────────────────────────────────────
+  rebuild();
+</script>
+
+</body>
+</html>
