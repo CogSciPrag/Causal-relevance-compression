@@ -2347,7 +2347,14 @@ window.Quarto = {
     <h2 id="toc-title">Table of contents</h2>
    
   <ul>
-  <li><a href="#kinney-and-lombrozo-2024" id="toc-kinney-and-lombrozo-2024" class="nav-link active" data-scroll-target="#kinney-and-lombrozo-2024">Kinney and Lombrozo (2024)</a>
+  <li><a href="#causal-mutual-information-measures" id="toc-causal-mutual-information-measures" class="nav-link active" data-scroll-target="#causal-mutual-information-measures">Causal Mutual Information Measures</a>
+  <ul class="collapse">
+  <li><a href="#kinney-and-lombrozo-2024" id="toc-kinney-and-lombrozo-2024" class="nav-link" data-scroll-target="#kinney-and-lombrozo-2024">Kinney and Lombrozo (2024)</a></li>
+  <li><a href="#our-approach-triple-c" id="toc-our-approach-triple-c" class="nav-link" data-scroll-target="#our-approach-triple-c">Our approach: triple-C</a></li>
+  <li><a href="#nsm" id="toc-nsm" class="nav-link" data-scroll-target="#nsm">NSM</a></li>
+  <li><a href="#cesm" id="toc-cesm" class="nav-link" data-scroll-target="#cesm">CESM</a></li>
+  </ul></li>
+  <li><a href="#comparison-kinney-and-lombrozo-2024" id="toc-comparison-kinney-and-lombrozo-2024" class="nav-link" data-scroll-target="#comparison-kinney-and-lombrozo-2024">Comparison: Kinney and Lombrozo (2024)</a>
   <ul class="collapse">
   <li><a href="#experiment-1" id="toc-experiment-1" class="nav-link" data-scroll-target="#experiment-1">Experiment 1</a></li>
   </ul></li>
@@ -2386,231 +2393,238 @@ window.Quarto = {
 <summary>Imports</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidyverse)</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(afex)</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(glue)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(glue)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(brms)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(knitr)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </div>
-<section id="kinney-and-lombrozo-2024" class="level1">
-<h1>Kinney and Lombrozo (2024)</h1>
-<section id="experiment-1" class="level3">
-<h3 class="anchored" data-anchor-id="experiment-1">Experiment 1</h3>
+<section id="causal-mutual-information-measures" class="level1">
+<h1>Causal Mutual Information Measures</h1>
+<section id="kinney-and-lombrozo-2024" class="level2">
+<h2 class="anchored" data-anchor-id="kinney-and-lombrozo-2024">Kinney and Lombrozo (2024)</h2>
+<p><span class="math display">\[CMI (\mathbf{C},E) = \sum_{\mathbf{c},e}q(\mathbf{c})p(e\mid do(\mathbf{c}))\log_2\frac{p(e\mid do(\mathbf{c}))}{p(e)}\]</span></p>
+<p>Kinney and Lombrozo (2024) assumes that all variables are intervened on, and as such probability distribution <span class="math inline">\(q\)</span> becomes uniform. The effect <span class="math inline">\(E\)</span> is binary, e.g. blue wings/not blue wings, for the sake of generality let <span class="math inline">\(E=\{0,1\}\)</span>. We can then write</p>
+<p><span class="math display">\[CMI (\mathbf{C},E) = \frac{1}{|\mathbf{C}|} \left(\sum_{\mathbf{c}}p(E=1\mid do(\mathbf{c}))\log_2\frac{p(E=1\mid do(\mathbf{c}))}{p(E=1)} +\sum_{\mathbf{c}}p(E=0\mid do(\mathbf{c}))\log_2\frac{p(E=0\mid do(\mathbf{c}))}{p(E=0)} \right),\]</span></p>
+<p>which corresponds to how <code>CMI_KL_orig</code> is computed in the code.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>CMI_KL_orig <span class="ot">&lt;-</span> <span class="cf">function</span>(prob_vector) {</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="co"># prob_vector: e.g. c(.85, .7, .01, .01)</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>  probs1 <span class="ot">&lt;-</span> prob_vector <span class="co"># probabilities that, e.g. Bricofly will develop blue wings</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  probs0 <span class="ot">&lt;-</span> <span class="dv">1</span> <span class="sc">-</span> prob_vector <span class="co"># probabilities that, e.g. Bricofly will **not** develop blue wings</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  q_c <span class="ot">&lt;-</span> <span class="dv">1</span> <span class="sc">/</span> <span class="fu">length</span>(probs1) <span class="co">#q(c) is simply a constant, since q is a uniform probability distribution</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>  p1 <span class="ot">&lt;-</span> <span class="dv">1</span> <span class="sc">/</span> <span class="fu">length</span>(probs1) <span class="sc">*</span> <span class="fu">sum</span>(probs1) <span class="co"># P(E=1)</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>  p0 <span class="ot">&lt;-</span> <span class="dv">1</span> <span class="sc">/</span> <span class="fu">length</span>(probs0) <span class="sc">*</span> <span class="fu">sum</span>(probs0) <span class="co"># P(E=0)</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>  q_c <span class="sc">*</span> (<span class="fu">sum</span>(probs1 <span class="sc">*</span> <span class="fu">log2</span>(probs1 <span class="sc">/</span> p1)) <span class="sc">+</span> <span class="fu">sum</span>(probs0 <span class="sc">*</span> <span class="fu">log2</span>(probs0 <span class="sc">/</span> p0)))</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>compress <span class="ot">&lt;-</span> <span class="cf">function</span>(prob_vector) {</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>  <span class="co"># compressing a 4x4 probability table to a 2x2 table</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">c</span>(<span class="fu">mean</span>(prob_vector[<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>]), <span class="fu">mean</span>(prob_vector[<span class="dv">3</span><span class="sc">:</span><span class="dv">4</span>]))</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>loss_KL_orig <span class="ot">&lt;-</span> <span class="cf">function</span>(prob_vector) {</span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">CMI_KL_orig</span>(prob_vector) <span class="sc">-</span> <span class="fu">CMI_KL_orig</span>(<span class="fu">compress</span>(prob_vector))</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
 <div class="cell">
 <details class="code-fold">
-<summary>Load &amp; process data</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>rawexp1 <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;KinneyLombrozo2024/Data/study_1_data.csv&quot;</span>,</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">col_types =</span> <span class="fu">cols</span>(<span class="at">.default =</span> <span class="fu">col_character</span>())</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="co"># glue(&#39;Raw data: {nrow(rawexp1)} rows, {ncol(rawexp1)} columns.&#39;)</span></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Drop the two Qualtrics label rows (question text and ImportId).</span></span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>KLexp1_wide <span class="ot">&lt;-</span> rawexp1 <span class="sc">|&gt;</span> <span class="fu">slice</span>(<span class="sc">-</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>))</span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Keep only participants who passed the comprehension check for their</span></span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="co"># vignette. (%in% treats NA as a non-match, mirroring the original logic.)</span></span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="co"># </span><span class="al">NOTE</span><span class="co"> — bug fix: the original notebook looped over `range(2, len(data))`</span></span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="co"># AFTER dropping two rows, so the final two participants in the file were</span></span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a><span class="co"># never checked and were retained regardless of their comprehension-check</span></span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="co"># answers. Here every participant is checked. If those last two rows</span></span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="co"># happened to fail the check, sample sizes will differ slightly from the</span></span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a><span class="co"># original output.</span></span>
-<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>KLexp1_wide <span class="ot">&lt;-</span> KLexp1_wide <span class="sc">|&gt;</span></span>
-<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(</span>
-<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    D_CompCheck <span class="sc">%in%</span></span>
-<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>      <span class="st">&quot;Drol&quot;</span> <span class="sc">|</span></span>
-<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>      B_CompCheck <span class="sc">%in%</span> <span class="st">&quot;Bricofly&quot;</span> <span class="sc">|</span></span>
-<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>      C_CompCheck <span class="sc">%in%</span> <span class="st">&quot;Chapagite&quot;</span></span>
-<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a><span class="co"># glue(&#39;After comprehension check: {nrow(KLexp1_wide)} rows, {ncol(KLexp1_wide)} columns.&#39;)</span></span>
-<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a><span class="co"># Remove all data from participants who rated any of the poor (&quot;Bad&quot;)</span></span>
-<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a><span class="co"># causal claims positively (i.e., gave a rating of 0, 1, 2, or 3).</span></span>
-<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a><span class="co"># This replaces the original notebook&#39;s 54 near-identical filtering loops.</span></span>
-<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a><span class="co"># As in the original, missing values do not trigger exclusion.</span></span>
-<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>bad_cols <span class="ot">&lt;-</span> <span class="fu">grep</span>(</span>
-<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;^[BCD]_(Prop|Stab)(Comp|High|Low)Bad(70|85|98)_1$&quot;</span>,</span>
-<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>  <span class="fu">names</span>(KLexp1_wide),</span>
-<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>  <span class="at">value =</span> <span class="cn">TRUE</span></span>
-<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(<span class="fu">length</span>(bad_cols) <span class="sc">==</span> <span class="dv">54</span>)</span>
-<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a>KLexp1_wide <span class="ot">&lt;-</span> KLexp1_wide <span class="sc">|&gt;</span></span>
-<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">if_any</span>(<span class="fu">all_of</span>(bad_cols), \(x) x <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">&quot;0&quot;</span>, <span class="st">&quot;1&quot;</span>, <span class="st">&quot;2&quot;</span>, <span class="st">&quot;3&quot;</span>))) <span class="sc">|&gt;</span></span>
-<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">pid =</span> <span class="fu">row_number</span>())</span>
-<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a><span class="co"># glue(&#39;After bad claim filtering: {nrow(KLexp1_wide)} rows, {ncol(KLexp1_wide)} columns.&#39;)</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<summary>Predictions table</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">tibble</span>(</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">x =</span> <span class="fu">c</span>(<span class="st">&quot;70&quot;</span>, <span class="st">&quot;85&quot;</span>, <span class="st">&quot;98&quot;</span>),</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">CMI_KL_orig_not_compressed =</span> <span class="fu">c</span>(</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">CMI_KL_orig</span>(<span class="fu">c</span>(.<span class="dv">7</span>, .<span class="dv">7</span>, .<span class="dv">01</span>, .<span class="dv">01</span>)) <span class="sc">|&gt;</span> <span class="fu">round</span>(<span class="dv">2</span>),</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">CMI_KL_orig</span>(<span class="fu">c</span>(.<span class="dv">85</span>, .<span class="dv">7</span>, .<span class="dv">01</span>, .<span class="dv">01</span>)) <span class="sc">|&gt;</span> <span class="fu">round</span>(<span class="dv">2</span>),</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">CMI_KL_orig</span>(<span class="fu">c</span>(.<span class="dv">98</span>, .<span class="dv">7</span>, .<span class="dv">01</span>, .<span class="dv">01</span>)) <span class="sc">|&gt;</span> <span class="fu">round</span>(<span class="dv">2</span>)</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>  ),</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">CMI_KL_orig_compressed =</span> <span class="fu">c</span>(</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">CMI_KL_orig</span>(<span class="fu">compress</span>(<span class="fu">c</span>(.<span class="dv">7</span>, .<span class="dv">7</span>, .<span class="dv">01</span>, .<span class="dv">01</span>))) <span class="sc">|&gt;</span> <span class="fu">round</span>(<span class="dv">2</span>),</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">CMI_KL_orig</span>(<span class="fu">compress</span>(<span class="fu">c</span>(.<span class="dv">85</span>, .<span class="dv">7</span>, .<span class="dv">01</span>, .<span class="dv">01</span>))) <span class="sc">|&gt;</span> <span class="fu">round</span>(<span class="dv">2</span>),</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="fu">CMI_KL_orig</span>(<span class="fu">compress</span>(<span class="fu">c</span>(.<span class="dv">98</span>, .<span class="dv">7</span>, .<span class="dv">01</span>, .<span class="dv">01</span>))) <span class="sc">|&gt;</span> <span class="fu">round</span>(<span class="dv">2</span>)</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>  ),</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>  <span class="at">KL_orig_loss =</span> <span class="fu">c</span>(</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="fu">loss_KL_orig</span>(<span class="fu">c</span>(.<span class="dv">7</span>, .<span class="dv">7</span>, .<span class="dv">01</span>, .<span class="dv">01</span>)) <span class="sc">|&gt;</span> <span class="fu">round</span>(<span class="dv">2</span>),</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="fu">loss_KL_orig</span>(<span class="fu">c</span>(.<span class="dv">85</span>, .<span class="dv">7</span>, .<span class="dv">01</span>, .<span class="dv">01</span>)) <span class="sc">|&gt;</span> <span class="fu">round</span>(<span class="dv">2</span>),</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="fu">loss_KL_orig</span>(<span class="fu">c</span>(.<span class="dv">98</span>, .<span class="dv">7</span>, .<span class="dv">01</span>, .<span class="dv">01</span>)) <span class="sc">|&gt;</span> <span class="fu">round</span>(<span class="dv">2</span>)</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th style="text-align: left;">x</th>
+<th style="text-align: right;">CMI_KL_orig_not_compressed</th>
+<th style="text-align: right;">CMI_KL_orig_compressed</th>
+<th style="text-align: right;">KL_orig_loss</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">70</td>
+<td style="text-align: right;">0.46</td>
+<td style="text-align: right;">0.46</td>
+<td style="text-align: right;">0.00</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">85</td>
+<td style="text-align: right;">0.55</td>
+<td style="text-align: right;">0.54</td>
+<td style="text-align: right;">0.01</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">98</td>
+<td style="text-align: right;">0.69</td>
+<td style="text-align: right;">0.63</td>
+<td style="text-align: right;">0.06</td>
+</tr>
+</tbody>
+</table>
 </div>
-<p>The following function <code>loss</code> corresponds to <span class="math inline">\(\mathscr{L}\)</span> in the equation from Kinney and Lombrozo (2024): <span class="math display">\[\mathscr{L}(\mathbf{C}, \widehat{\mathbf{C}},E) = CMI(\mathbf{C},E) - CMI(\widehat{\mathbf{C}},E)\]</span></p>
-<div class="cell">
-<details open class="code-fold">
-<summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>kl <span class="ot">&lt;-</span> <span class="cf">function</span>(p, q) <span class="fu">sum</span>(p <span class="sc">*</span> <span class="fu">log2</span>(p <span class="sc">/</span> q))</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="co"># Kullback–Leibler divergence in bits, equivalent to `scipy.stats.entropy(p, q, base = 2)` in the original code</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>loss <span class="ot">&lt;-</span> <span class="cf">function</span>(x) {</span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  conditional_noncomp1 <span class="ot">&lt;-</span> <span class="fu">c</span>(.<span class="dv">01</span>, .<span class="dv">99</span>)</span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>  conditional_noncomp2 <span class="ot">&lt;-</span> <span class="fu">c</span>(.<span class="dv">01</span>, .<span class="dv">99</span>)</span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>  conditional_noncomp3 <span class="ot">&lt;-</span> <span class="fu">c</span>(.<span class="dv">70</span>, .<span class="dv">30</span>)</span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>  conditional_noncomp4 <span class="ot">&lt;-</span> <span class="fu">c</span>(x, <span class="dv">1</span> <span class="sc">-</span> x)</span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>  conditional_comp1 <span class="ot">&lt;-</span> <span class="fu">c</span>(.<span class="dv">01</span>, .<span class="dv">99</span>)</span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>  conditional_comp2 <span class="ot">&lt;-</span> <span class="fu">c</span>((.<span class="dv">7</span> <span class="sc">+</span> x) <span class="sc">/</span> <span class="dv">2</span>, <span class="dv">1</span> <span class="sc">-</span> (.<span class="dv">7</span> <span class="sc">+</span> x) <span class="sc">/</span> <span class="dv">2</span>)</span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>  m <span class="ot">&lt;-</span> .<span class="dv">01</span> <span class="sc">*</span> .<span class="dv">5</span> <span class="sc">+</span> .<span class="dv">7</span> <span class="sc">*</span> .<span class="dv">25</span> <span class="sc">+</span> x <span class="sc">*</span> .<span class="dv">25</span></span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>  marginal <span class="ot">&lt;-</span> <span class="fu">c</span>(m, <span class="dv">1</span> <span class="sc">-</span> m)</span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>  cmi_noncomp <span class="ot">&lt;-</span> .<span class="dv">25</span> <span class="sc">*</span></span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="fu">kl</span>(conditional_noncomp1, marginal) <span class="sc">+</span></span>
-<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    .<span class="dv">25</span> <span class="sc">*</span> <span class="fu">kl</span>(conditional_noncomp2, marginal) <span class="sc">+</span></span>
-<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    .<span class="dv">25</span> <span class="sc">*</span> <span class="fu">kl</span>(conditional_noncomp3, marginal) <span class="sc">+</span></span>
-<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    .<span class="dv">25</span> <span class="sc">*</span> <span class="fu">kl</span>(conditional_noncomp4, marginal)</span>
-<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>  cmi_comp <span class="ot">&lt;-</span> .<span class="dv">50</span> <span class="sc">*</span></span>
-<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    <span class="fu">kl</span>(conditional_comp1, marginal) <span class="sc">+</span></span>
-<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    .<span class="dv">50</span> <span class="sc">*</span> <span class="fu">kl</span>(conditional_comp2, marginal)</span>
-<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>  cmi_noncomp <span class="sc">-</span> cmi_comp</span>
-<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
 </div>
-<p>We construct the final processed dataframe for Experiment 1, <code>KLexp1</code>, including the loss values for each condition and the difference scores used in the original analysis:</p>
+</section>
+<section id="our-approach-triple-c" class="level2">
+<h2 class="anchored" data-anchor-id="our-approach-triple-c">Our approach: triple-C</h2>
+<p>TODO</p>
+</section>
+<section id="nsm" class="level2">
+<h2 class="anchored" data-anchor-id="nsm">NSM</h2>
+<p>TODO</p>
+</section>
+<section id="cesm" class="level2">
+<h2 class="anchored" data-anchor-id="cesm">CESM</h2>
+<p>TODO</p>
+</section>
+</section>
+<section id="comparison-kinney-and-lombrozo-2024" class="level1">
+<h1>Comparison: Kinney and Lombrozo (2024)</h1>
+<section id="experiment-1" class="level3">
+<h3 class="anchored" data-anchor-id="experiment-1">Experiment 1</h3>
+<p>We wrangle the data from Experiment 1, and initialise <code>KLexp1_measures</code> with data from the experiment and predictions given by <code>KL_orig</code> measure.</p>
+<p>Base structure of the KLexp1_measures dataset is as follows:</p>
 <ul>
 <li><code>pid</code> — Participant ID.</li>
 <li><code>vignette</code> — <code>Bricofly</code> / <code>Chapagite</code> / <code>Drol</code>; between-subjects</li>
 <li><code>compression_kind</code> — <code>Prop</code> or <code>Stab</code>; between-subjects</li>
 <li><code>claim_kind</code> — <code>Comp</code> / <code>High</code> / <code>Low</code>. Three kinds of statements visible at once on one screen.</li>
 <li><code>x_val</code> — Value of <code>x</code> in the vignette. Three levels: 70, 85, 98 which correspond to different amounts of loss. Between-subjects.</li>
-<li><code>loss_val</code> — Loss value computed from <code>x_val</code> using the <code>loss</code> function above.</li>
 <li><code>participant_response</code> — participant’s rating ‘how good it would be to include each of the following statements in a summary of this report’; scale from -3 (very bad) to 3 (very good)</li>
-<li><code>comp_eval</code>, <code>high_eval</code>, <code>low_eval</code> — Evaluations of each claim type.</li>
-<li><code>comp_high_diff</code> — <code>comp_eval - high_eval</code></li>
-<li><code>comp_avg_diff</code> — <code>comp_eval - (0.5 * high_eval + 0.5 * low_eval)</code></li>
-<li><code>high_low_diff</code> — <code>high_eval - low_eval</code></li>
-<li><code>feedback</code> — Feedback from participants</li>
 </ul>
-<p>In addition, we create a separate dataframe <code>KLexp1_measures</code> which contains the columns needed for the comparison of causal relevance measures, including the original KL’s loss values as <code>KL_measure_orig</code>:</p>
+<p>This is then accompanied by prediction values given by various tested measures.</p>
 <div class="cell">
 <details class="code-fold">
 <summary>Data Wrangling</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>KLexp1_wide <span class="ot">&lt;-</span> KLexp1_wide <span class="sc">|&gt;</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">vignette_prefix =</span> <span class="fu">case_match</span>(</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>      Vignette,</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>      <span class="st">&quot;Bricofly&quot;</span> <span class="sc">~</span> <span class="st">&quot;B&quot;</span>,</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>      <span class="st">&quot;Chapagite&quot;</span> <span class="sc">~</span> <span class="st">&quot;C&quot;</span>,</span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>      <span class="st">&quot;Drol&quot;</span> <span class="sc">~</span> <span class="st">&quot;D&quot;</span></span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    ),</span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">loss_level =</span> <span class="fu">case_match</span>(</span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>      Group,</span>
-<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>      <span class="fu">c</span>(<span class="st">&quot;Prop_No_Loss&quot;</span>, <span class="st">&quot;Stab_No_Loss&quot;</span>) <span class="sc">~</span> <span class="st">&quot;70&quot;</span>,</span>
-<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>      <span class="fu">c</span>(<span class="st">&quot;Prop_Loss_1&quot;</span>, <span class="st">&quot;Stab_Loss_1&quot;</span>) <span class="sc">~</span> <span class="st">&quot;85&quot;</span>,</span>
-<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>      <span class="fu">c</span>(<span class="st">&quot;Prop_Loss_2&quot;</span>, <span class="st">&quot;Stab_Loss_2&quot;</span>) <span class="sc">~</span> <span class="st">&quot;98&quot;</span></span>
-<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    ),</span>
-<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>    <span class="at">loss_val =</span> <span class="fu">case_match</span>(</span>
-<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>      Group,</span>
-<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>      <span class="fu">c</span>(<span class="st">&quot;Prop_No_Loss&quot;</span>, <span class="st">&quot;Stab_No_Loss&quot;</span>) <span class="sc">~</span> <span class="fu">loss</span>(.<span class="dv">70</span>),</span>
-<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>      <span class="fu">c</span>(<span class="st">&quot;Prop_Loss_1&quot;</span>, <span class="st">&quot;Stab_Loss_1&quot;</span>) <span class="sc">~</span> <span class="fu">loss</span>(.<span class="dv">85</span>),</span>
-<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>      <span class="fu">c</span>(<span class="st">&quot;Prop_Loss_2&quot;</span>, <span class="st">&quot;Stab_Loss_2&quot;</span>) <span class="sc">~</span> <span class="fu">loss</span>(.<span class="dv">98</span>)</span>
-<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>    ),</span>
-<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>    <span class="at">mode_label =</span> <span class="fu">if_else</span>(<span class="fu">str_starts</span>(Group, <span class="st">&quot;Prop&quot;</span>), <span class="st">&quot;Prop&quot;</span>, <span class="st">&quot;Stab&quot;</span>)</span>
-<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a><span class="co"># Pull each participant&#39;s rating of a given claim from the column that</span></span>
-<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a><span class="co"># matches their vignette / mode / loss condition.</span></span>
-<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>pick_eval <span class="ot">&lt;-</span> <span class="cf">function</span>(df, claim) {</span>
-<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>  cols <span class="ot">&lt;-</span> <span class="fu">paste0</span>(</span>
-<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>    df<span class="sc">$</span>vignette_prefix,</span>
-<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;_&quot;</span>,</span>
-<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a>    df<span class="sc">$</span>mode_label,</span>
-<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a>    claim,</span>
-<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;Good&quot;</span>,</span>
-<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a>    df<span class="sc">$</span>loss_level,</span>
-<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;_1&quot;</span></span>
-<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a>  m <span class="ot">&lt;-</span> <span class="fu">as.matrix</span>(df[, <span class="fu">unique</span>(cols)])</span>
-<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a>  <span class="fu">as.numeric</span>(m[<span class="fu">cbind</span>(<span class="fu">seq_len</span>(<span class="fu">nrow</span>(df)), <span class="fu">match</span>(cols, <span class="fu">colnames</span>(m)))])</span>
-<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-40"><a href="#cb4-40" aria-hidden="true" tabindex="-1"></a>KLexp1_wide <span class="ot">&lt;-</span> KLexp1_wide <span class="sc">|&gt;</span></span>
-<span id="cb4-41"><a href="#cb4-41" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb4-42"><a href="#cb4-42" aria-hidden="true" tabindex="-1"></a>    <span class="at">comp_eval =</span> <span class="fu">pick_eval</span>(KLexp1_wide, <span class="st">&quot;Comp&quot;</span>),</span>
-<span id="cb4-43"><a href="#cb4-43" aria-hidden="true" tabindex="-1"></a>    <span class="at">high_eval =</span> <span class="fu">pick_eval</span>(KLexp1_wide, <span class="st">&quot;High&quot;</span>),</span>
-<span id="cb4-44"><a href="#cb4-44" aria-hidden="true" tabindex="-1"></a>    <span class="at">low_eval =</span> <span class="fu">pick_eval</span>(KLexp1_wide, <span class="st">&quot;Low&quot;</span>),</span>
-<span id="cb4-45"><a href="#cb4-45" aria-hidden="true" tabindex="-1"></a>    <span class="at">comp_high_diff =</span> comp_eval <span class="sc">-</span> high_eval,</span>
-<span id="cb4-46"><a href="#cb4-46" aria-hidden="true" tabindex="-1"></a>    <span class="at">comp_avg_diff =</span> comp_eval <span class="sc">-</span> (<span class="fl">0.5</span> <span class="sc">*</span> high_eval <span class="sc">+</span> <span class="fl">0.5</span> <span class="sc">*</span> low_eval),</span>
-<span id="cb4-47"><a href="#cb4-47" aria-hidden="true" tabindex="-1"></a>    <span class="at">high_low_diff =</span> high_eval <span class="sc">-</span> low_eval</span>
-<span id="cb4-48"><a href="#cb4-48" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb4-49"><a href="#cb4-49" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-50"><a href="#cb4-50" aria-hidden="true" tabindex="-1"></a>exp_cols <span class="ot">&lt;-</span> <span class="fu">grep</span>(<span class="st">&quot;^[BCD]_(Prop|Stab)&quot;</span>, <span class="fu">names</span>(KLexp1_wide), <span class="at">value =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb4-51"><a href="#cb4-51" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-52"><a href="#cb4-52" aria-hidden="true" tabindex="-1"></a>KLexp1_long <span class="ot">&lt;-</span> KLexp1_wide <span class="sc">|&gt;</span></span>
-<span id="cb4-53"><a href="#cb4-53" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(</span>
-<span id="cb4-54"><a href="#cb4-54" aria-hidden="true" tabindex="-1"></a>    <span class="fu">all_of</span>(exp_cols),</span>
-<span id="cb4-55"><a href="#cb4-55" aria-hidden="true" tabindex="-1"></a>    <span class="at">names_to =</span> <span class="fu">c</span>(</span>
-<span id="cb4-56"><a href="#cb4-56" aria-hidden="true" tabindex="-1"></a>      <span class="st">&quot;prefix&quot;</span>,</span>
-<span id="cb4-57"><a href="#cb4-57" aria-hidden="true" tabindex="-1"></a>      <span class="st">&quot;compression_kind&quot;</span>,</span>
-<span id="cb4-58"><a href="#cb4-58" aria-hidden="true" tabindex="-1"></a>      <span class="st">&quot;claim_kind&quot;</span>,</span>
-<span id="cb4-59"><a href="#cb4-59" aria-hidden="true" tabindex="-1"></a>      <span class="st">&quot;claim_valence&quot;</span>,</span>
-<span id="cb4-60"><a href="#cb4-60" aria-hidden="true" tabindex="-1"></a>      <span class="st">&quot;x_val&quot;</span></span>
-<span id="cb4-61"><a href="#cb4-61" aria-hidden="true" tabindex="-1"></a>    ),</span>
-<span id="cb4-62"><a href="#cb4-62" aria-hidden="true" tabindex="-1"></a>    <span class="at">names_pattern =</span> <span class="st">&quot;^([BCD])_(Prop|Stab)(Comp|High|Low)(Good|Bad)(70|85|98)_1$&quot;</span>,</span>
-<span id="cb4-63"><a href="#cb4-63" aria-hidden="true" tabindex="-1"></a>    <span class="at">names_transform =</span> <span class="fu">list</span>(<span class="at">x_val =</span> as.integer, <span class="at">rating =</span> as.integer),</span>
-<span id="cb4-64"><a href="#cb4-64" aria-hidden="true" tabindex="-1"></a>    <span class="at">values_to =</span> <span class="st">&quot;rating&quot;</span>,</span>
-<span id="cb4-65"><a href="#cb4-65" aria-hidden="true" tabindex="-1"></a>    <span class="at">values_transform =</span> <span class="fu">list</span>(<span class="at">rating =</span> as.integer),</span>
-<span id="cb4-66"><a href="#cb4-66" aria-hidden="true" tabindex="-1"></a>    <span class="at">values_drop_na =</span> <span class="cn">TRUE</span></span>
-<span id="cb4-67"><a href="#cb4-67" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb4-68"><a href="#cb4-68" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-69"><a href="#cb4-69" aria-hidden="true" tabindex="-1"></a>KLexp1 <span class="ot">&lt;-</span> KLexp1_long <span class="sc">|&gt;</span></span>
-<span id="cb4-70"><a href="#cb4-70" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb4-71"><a href="#cb4-71" aria-hidden="true" tabindex="-1"></a>    <span class="at">compression_kind =</span> <span class="fu">factor</span>(compression_kind, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">&quot;Prop&quot;</span>, <span class="st">&quot;Stab&quot;</span>)),</span>
-<span id="cb4-72"><a href="#cb4-72" aria-hidden="true" tabindex="-1"></a>    <span class="at">claim_kind =</span> <span class="fu">factor</span>(claim_kind, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">&quot;Comp&quot;</span>, <span class="st">&quot;High&quot;</span>, <span class="st">&quot;Low&quot;</span>))</span>
-<span id="cb4-73"><a href="#cb4-73" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
-<span id="cb4-74"><a href="#cb4-74" aria-hidden="true" tabindex="-1"></a>  <span class="fu">rename</span>(</span>
-<span id="cb4-75"><a href="#cb4-75" aria-hidden="true" tabindex="-1"></a>    <span class="at">vignette =</span> Vignette,</span>
-<span id="cb4-76"><a href="#cb4-76" aria-hidden="true" tabindex="-1"></a>    <span class="at">feedback =</span> Feedback,</span>
-<span id="cb4-77"><a href="#cb4-77" aria-hidden="true" tabindex="-1"></a>    <span class="at">participant_response =</span> rating</span>
-<span id="cb4-78"><a href="#cb4-78" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
-<span id="cb4-79"><a href="#cb4-79" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(claim_valence <span class="sc">==</span> <span class="st">&quot;Good&quot;</span>) <span class="sc">|&gt;</span></span>
-<span id="cb4-80"><a href="#cb4-80" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(</span>
-<span id="cb4-81"><a href="#cb4-81" aria-hidden="true" tabindex="-1"></a>    pid,</span>
-<span id="cb4-82"><a href="#cb4-82" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-83"><a href="#cb4-83" aria-hidden="true" tabindex="-1"></a>    vignette,</span>
-<span id="cb4-84"><a href="#cb4-84" aria-hidden="true" tabindex="-1"></a>    compression_kind,</span>
-<span id="cb4-85"><a href="#cb4-85" aria-hidden="true" tabindex="-1"></a>    claim_kind,</span>
-<span id="cb4-86"><a href="#cb4-86" aria-hidden="true" tabindex="-1"></a>    x_val,</span>
-<span id="cb4-87"><a href="#cb4-87" aria-hidden="true" tabindex="-1"></a>    loss_val,</span>
-<span id="cb4-88"><a href="#cb4-88" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-89"><a href="#cb4-89" aria-hidden="true" tabindex="-1"></a>    participant_response,</span>
-<span id="cb4-90"><a href="#cb4-90" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-91"><a href="#cb4-91" aria-hidden="true" tabindex="-1"></a>    comp_eval,</span>
-<span id="cb4-92"><a href="#cb4-92" aria-hidden="true" tabindex="-1"></a>    high_eval,</span>
-<span id="cb4-93"><a href="#cb4-93" aria-hidden="true" tabindex="-1"></a>    low_eval,</span>
-<span id="cb4-94"><a href="#cb4-94" aria-hidden="true" tabindex="-1"></a>    comp_high_diff,</span>
-<span id="cb4-95"><a href="#cb4-95" aria-hidden="true" tabindex="-1"></a>    comp_avg_diff,</span>
-<span id="cb4-96"><a href="#cb4-96" aria-hidden="true" tabindex="-1"></a>    high_low_diff,</span>
-<span id="cb4-97"><a href="#cb4-97" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-98"><a href="#cb4-98" aria-hidden="true" tabindex="-1"></a>    feedback</span>
-<span id="cb4-99"><a href="#cb4-99" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb4-100"><a href="#cb4-100" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-101"><a href="#cb4-101" aria-hidden="true" tabindex="-1"></a>KLexp1_measures <span class="ot">&lt;-</span> KLexp1 <span class="sc">|&gt;</span></span>
-<span id="cb4-102"><a href="#cb4-102" aria-hidden="true" tabindex="-1"></a>    <span class="fu">select</span>(pid, vignette, compression_kind, claim_kind, x_val, participant_response,loss_val) <span class="sc">|&gt;</span></span>
-<span id="cb4-103"><a href="#cb4-103" aria-hidden="true" tabindex="-1"></a>    <span class="fu">rename</span>(</span>
-<span id="cb4-104"><a href="#cb4-104" aria-hidden="true" tabindex="-1"></a>        <span class="at">KL_measure_orig =</span> loss_val</span>
-<span id="cb4-105"><a href="#cb4-105" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb4-106"><a href="#cb4-106" aria-hidden="true" tabindex="-1"></a><span class="fu">head</span>(KLexp1_measures)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>rawexp1 <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;KinneyLombrozo2024/Data/study_1_data.csv&quot;</span>,</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">col_types =</span> <span class="fu">cols</span>(<span class="at">.default =</span> <span class="fu">col_character</span>())</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="co"># glue(&#39;Raw data: {nrow(rawexp1)} rows, {ncol(rawexp1)} columns.&#39;)</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Drop the two Qualtrics label rows (question text and ImportId).</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>KLexp1df <span class="ot">&lt;-</span> rawexp1 <span class="sc">|&gt;</span> <span class="fu">slice</span>(<span class="sc">-</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>))</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Keep only participants who passed the comprehension check for their</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="co"># vignette. (%in% treats NA as a non-match, mirroring the original logic.)</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a><span class="co"># </span><span class="al">NOTE</span><span class="co"> — bug fix: the original notebook looped over `range(2, len(data))`</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a><span class="co"># AFTER dropping two rows, so the final two participants in the file were</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="co"># never checked and were retained regardless of their comprehension-check</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a><span class="co"># answers. Here every participant is checked. If those last two rows</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a><span class="co"># happened to fail the check, sample sizes will differ slightly from the</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a><span class="co"># original output.</span></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>KLexp1df <span class="ot">&lt;-</span> KLexp1df <span class="sc">|&gt;</span></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>    D_CompCheck <span class="sc">%in%</span></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>      <span class="st">&quot;Drol&quot;</span> <span class="sc">|</span></span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>      B_CompCheck <span class="sc">%in%</span> <span class="st">&quot;Bricofly&quot;</span> <span class="sc">|</span></span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>      C_CompCheck <span class="sc">%in%</span> <span class="st">&quot;Chapagite&quot;</span></span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a><span class="co"># glue(&#39;After comprehension check: {nrow(KLexp1df)} rows, {ncol(KLexp1df)} columns.&#39;)</span></span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a><span class="co"># Remove all data from participants who rated any of the poor (&quot;Bad&quot;)</span></span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a><span class="co"># causal claims positively (i.e., gave a rating of 0, 1, 2, or 3).</span></span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a><span class="co"># This replaces the original notebook&#39;s 54 near-identical filtering loops.</span></span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a><span class="co"># As in the original, missing values do not trigger exclusion.</span></span>
+<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a>bad_cols <span class="ot">&lt;-</span> <span class="fu">grep</span>(</span>
+<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;^[BCD]_(Prop|Stab)(Comp|High|Low)Bad(70|85|98)_1$&quot;</span>,</span>
+<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a>  <span class="fu">names</span>(KLexp1df),</span>
+<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a>  <span class="at">value =</span> <span class="cn">TRUE</span></span>
+<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(<span class="fu">length</span>(bad_cols) <span class="sc">==</span> <span class="dv">54</span>)</span>
+<span id="cb4-40"><a href="#cb4-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-41"><a href="#cb4-41" aria-hidden="true" tabindex="-1"></a>KLexp1df <span class="ot">&lt;-</span> KLexp1df <span class="sc">|&gt;</span></span>
+<span id="cb4-42"><a href="#cb4-42" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">if_any</span>(<span class="fu">all_of</span>(bad_cols), \(x) x <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">&quot;0&quot;</span>, <span class="st">&quot;1&quot;</span>, <span class="st">&quot;2&quot;</span>, <span class="st">&quot;3&quot;</span>))) <span class="sc">|&gt;</span></span>
+<span id="cb4-43"><a href="#cb4-43" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">pid =</span> <span class="fu">row_number</span>())</span>
+<span id="cb4-44"><a href="#cb4-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-45"><a href="#cb4-45" aria-hidden="true" tabindex="-1"></a><span class="co"># glue(&#39;After bad claim filtering: {nrow(KLexp1df)} rows, {ncol(KLexp1df)} columns.&#39;)</span></span>
+<span id="cb4-46"><a href="#cb4-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-47"><a href="#cb4-47" aria-hidden="true" tabindex="-1"></a>exp_cols <span class="ot">&lt;-</span> <span class="fu">grep</span>(<span class="st">&quot;^[BCD]_(Prop|Stab)&quot;</span>, <span class="fu">names</span>(KLexp1df), <span class="at">value =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb4-48"><a href="#cb4-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-49"><a href="#cb4-49" aria-hidden="true" tabindex="-1"></a>KLexp1_long <span class="ot">&lt;-</span> KLexp1df <span class="sc">|&gt;</span></span>
+<span id="cb4-50"><a href="#cb4-50" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(</span>
+<span id="cb4-51"><a href="#cb4-51" aria-hidden="true" tabindex="-1"></a>    <span class="fu">all_of</span>(exp_cols),</span>
+<span id="cb4-52"><a href="#cb4-52" aria-hidden="true" tabindex="-1"></a>    <span class="at">names_to =</span> <span class="fu">c</span>(</span>
+<span id="cb4-53"><a href="#cb4-53" aria-hidden="true" tabindex="-1"></a>      <span class="st">&quot;prefix&quot;</span>,</span>
+<span id="cb4-54"><a href="#cb4-54" aria-hidden="true" tabindex="-1"></a>      <span class="st">&quot;compression_kind&quot;</span>,</span>
+<span id="cb4-55"><a href="#cb4-55" aria-hidden="true" tabindex="-1"></a>      <span class="st">&quot;claim_kind&quot;</span>,</span>
+<span id="cb4-56"><a href="#cb4-56" aria-hidden="true" tabindex="-1"></a>      <span class="st">&quot;claim_valence&quot;</span>,</span>
+<span id="cb4-57"><a href="#cb4-57" aria-hidden="true" tabindex="-1"></a>      <span class="st">&quot;x_val&quot;</span></span>
+<span id="cb4-58"><a href="#cb4-58" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb4-59"><a href="#cb4-59" aria-hidden="true" tabindex="-1"></a>    <span class="at">names_pattern =</span> <span class="st">&quot;^([BCD])_(Prop|Stab)(Comp|High|Low)(Good|Bad)(70|85|98)_1$&quot;</span>,</span>
+<span id="cb4-60"><a href="#cb4-60" aria-hidden="true" tabindex="-1"></a>    <span class="at">names_transform =</span> <span class="fu">list</span>(<span class="at">x_val =</span> as.integer, <span class="at">rating =</span> as.integer),</span>
+<span id="cb4-61"><a href="#cb4-61" aria-hidden="true" tabindex="-1"></a>    <span class="at">values_to =</span> <span class="st">&quot;rating&quot;</span>,</span>
+<span id="cb4-62"><a href="#cb4-62" aria-hidden="true" tabindex="-1"></a>    <span class="at">values_transform =</span> <span class="fu">list</span>(<span class="at">rating =</span> as.integer),</span>
+<span id="cb4-63"><a href="#cb4-63" aria-hidden="true" tabindex="-1"></a>    <span class="at">values_drop_na =</span> <span class="cn">TRUE</span></span>
+<span id="cb4-64"><a href="#cb4-64" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb4-65"><a href="#cb4-65" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-66"><a href="#cb4-66" aria-hidden="true" tabindex="-1"></a>KLexp1 <span class="ot">&lt;-</span> KLexp1_long <span class="sc">|&gt;</span></span>
+<span id="cb4-67"><a href="#cb4-67" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(claim_valence <span class="sc">==</span> <span class="st">&quot;Good&quot;</span>) <span class="sc">|&gt;</span></span>
+<span id="cb4-68"><a href="#cb4-68" aria-hidden="true" tabindex="-1"></a>  <span class="fu">rename</span>(</span>
+<span id="cb4-69"><a href="#cb4-69" aria-hidden="true" tabindex="-1"></a>    <span class="at">vignette =</span> Vignette,</span>
+<span id="cb4-70"><a href="#cb4-70" aria-hidden="true" tabindex="-1"></a>    <span class="at">participant_response =</span> rating</span>
+<span id="cb4-71"><a href="#cb4-71" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb4-72"><a href="#cb4-72" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb4-73"><a href="#cb4-73" aria-hidden="true" tabindex="-1"></a>    <span class="at">compression_kind =</span> <span class="fu">factor</span>(compression_kind, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">&quot;Prop&quot;</span>, <span class="st">&quot;Stab&quot;</span>)),</span>
+<span id="cb4-74"><a href="#cb4-74" aria-hidden="true" tabindex="-1"></a>    <span class="at">claim_kind =</span> <span class="fu">factor</span>(claim_kind, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">&quot;Comp&quot;</span>, <span class="st">&quot;High&quot;</span>, <span class="st">&quot;Low&quot;</span>)),</span>
+<span id="cb4-75"><a href="#cb4-75" aria-hidden="true" tabindex="-1"></a>    <span class="at">CMI_KL_orig =</span> <span class="fu">map2_dbl</span>(x_val, claim_kind, \(x, k) {</span>
+<span id="cb4-76"><a href="#cb4-76" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (k <span class="sc">==</span> <span class="st">&quot;Comp&quot;</span>) {</span>
+<span id="cb4-77"><a href="#cb4-77" aria-hidden="true" tabindex="-1"></a>        <span class="fu">CMI_KL_orig</span>(<span class="fu">compress</span>(<span class="fu">c</span>(x <span class="sc">/</span> <span class="dv">100</span>, .<span class="dv">7</span>, .<span class="dv">01</span>, .<span class="dv">01</span>)))</span>
+<span id="cb4-78"><a href="#cb4-78" aria-hidden="true" tabindex="-1"></a>      } <span class="cf">else</span> <span class="cf">if</span> (k <span class="sc">==</span> <span class="st">&quot;High&quot;</span>) {</span>
+<span id="cb4-79"><a href="#cb4-79" aria-hidden="true" tabindex="-1"></a>        <span class="fu">CMI_KL_orig</span>(<span class="fu">c</span>(x <span class="sc">/</span> <span class="dv">100</span>, .<span class="dv">7</span>, .<span class="dv">01</span>, .<span class="dv">01</span>))</span>
+<span id="cb4-80"><a href="#cb4-80" aria-hidden="true" tabindex="-1"></a>      } <span class="cf">else</span> {</span>
+<span id="cb4-81"><a href="#cb4-81" aria-hidden="true" tabindex="-1"></a>        <span class="fu">CMI_KL_orig</span>(<span class="fu">c</span>(.<span class="dv">7</span>, .<span class="dv">7</span>, .<span class="dv">01</span>, .<span class="dv">01</span>))</span>
+<span id="cb4-82"><a href="#cb4-82" aria-hidden="true" tabindex="-1"></a>      }</span>
+<span id="cb4-83"><a href="#cb4-83" aria-hidden="true" tabindex="-1"></a>    })</span>
+<span id="cb4-84"><a href="#cb4-84" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb4-85"><a href="#cb4-85" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(</span>
+<span id="cb4-86"><a href="#cb4-86" aria-hidden="true" tabindex="-1"></a>    pid,</span>
+<span id="cb4-87"><a href="#cb4-87" aria-hidden="true" tabindex="-1"></a>    vignette,</span>
+<span id="cb4-88"><a href="#cb4-88" aria-hidden="true" tabindex="-1"></a>    compression_kind,</span>
+<span id="cb4-89"><a href="#cb4-89" aria-hidden="true" tabindex="-1"></a>    claim_kind,</span>
+<span id="cb4-90"><a href="#cb4-90" aria-hidden="true" tabindex="-1"></a>    x_val,</span>
+<span id="cb4-91"><a href="#cb4-91" aria-hidden="true" tabindex="-1"></a>    participant_response,</span>
+<span id="cb4-92"><a href="#cb4-92" aria-hidden="true" tabindex="-1"></a>    CMI_KL_orig</span>
+<span id="cb4-93"><a href="#cb4-93" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb4-94"><a href="#cb4-94" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-95"><a href="#cb4-95" aria-hidden="true" tabindex="-1"></a><span class="fu">glimpse</span>(KLexp1)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 6 × 7
-    pid vignette  compression_kind claim_kind x_val participant_response
-  &lt;int&gt; &lt;chr&gt;     &lt;fct&gt;            &lt;fct&gt;      &lt;int&gt;                &lt;int&gt;
-1     1 Bricofly  Prop             Comp          98                    3
-2     1 Bricofly  Prop             High          98                    3
-3     1 Bricofly  Prop             Low           98                    1
-4     2 Chapagite Stab             Comp          70                    2
-5     2 Chapagite Stab             High          70                    2
-6     2 Chapagite Stab             Low           70                    2
-# ℹ 1 more variable: KL_measure_orig &lt;dbl&gt;</code></pre>
+<pre><code>Rows: 1,350
+Columns: 7
+$ pid                  &lt;int&gt; 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6…
+$ vignette             &lt;chr&gt; &quot;Bricofly&quot;, &quot;Bricofly&quot;, &quot;Bricofly&quot;, &quot;Chapagite&quot;, …
+$ compression_kind     &lt;fct&gt; Prop, Prop, Prop, Stab, Stab, Stab, Stab, Stab, S…
+$ claim_kind           &lt;fct&gt; Comp, High, Low, Comp, High, Low, Comp, High, Low…
+$ x_val                &lt;int&gt; 98, 98, 98, 70, 70, 70, 85, 85, 85, 70, 70, 70, 9…
+$ participant_response &lt;int&gt; 3, 3, 1, 2, 2, 2, 3, 2, 1, 1, -1, -1, 2, 3, 2, 3,…
+$ CMI_KL_orig          &lt;dbl&gt; 0.6261569, 0.6876288, 0.4574124, 0.4574124, 0.457…</code></pre>
 </div>
 </div>
 <p>We can now make a plot which corresponds to Fig. 2 in the paper:</p>
@@ -2649,31 +2663,34 @@ window.Quarto = {
 </div>
 </div>
 </div>
-<p>Adding <code>low</code> to Fig. 2:</p>
+<p>Adding <code>low</code>, we get:</p>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(KLexp1, <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">factor</span>(x_val), <span class="at">y =</span> participant_response, <span class="at">fill =</span> claim_kind)) <span class="sc">+</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">stat_summary</span>(</span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">fun =</span> mean,</span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">geom =</span> <span class="st">&quot;col&quot;</span>,</span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">width =</span> <span class="fl">0.6</span>,</span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">position =</span> <span class="fu">position_dodge</span>(<span class="at">width =</span> <span class="fl">0.7</span>)</span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span></span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">stat_summary</span>(</span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">fun.data =</span> mean_se,</span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">geom =</span> <span class="st">&quot;errorbar&quot;</span>,</span>
-<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">width =</span> <span class="fl">0.2</span>,</span>
-<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">position =</span> <span class="fu">position_dodge</span>(<span class="at">width =</span> <span class="fl">0.7</span>)</span>
-<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span></span>
-<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_y_continuous</span>(<span class="at">breaks =</span> <span class="dv">0</span><span class="sc">:</span><span class="dv">3</span>) <span class="sc">+</span></span>
-<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">coord_cartesian</span>(<span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">3</span>)) <span class="sc">+</span></span>
-<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(</span>
-<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>    <span class="at">x =</span> <span class="st">&quot;x (corresponds to loss level)&quot;</span>,</span>
-<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>    <span class="at">y =</span> <span class="st">&quot;Mean Evaluation of Causal Claim&quot;</span>,</span>
-<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>    <span class="at">fill =</span> <span class="st">&quot;Causal claim kind&quot;</span></span>
-<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span></span>
-<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_minimal</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  KLexp1,</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">factor</span>(x_val), <span class="at">y =</span> participant_response, <span class="at">fill =</span> claim_kind)</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>) <span class="sc">+</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">stat_summary</span>(</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">fun =</span> mean,</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">geom =</span> <span class="st">&quot;col&quot;</span>,</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">width =</span> <span class="fl">0.6</span>,</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">position =</span> <span class="fu">position_dodge</span>(<span class="at">width =</span> <span class="fl">0.7</span>)</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">stat_summary</span>(</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">fun.data =</span> mean_se,</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">geom =</span> <span class="st">&quot;errorbar&quot;</span>,</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">width =</span> <span class="fl">0.2</span>,</span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>    <span class="at">position =</span> <span class="fu">position_dodge</span>(<span class="at">width =</span> <span class="fl">0.7</span>)</span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_y_continuous</span>(<span class="at">breaks =</span> <span class="dv">0</span><span class="sc">:</span><span class="dv">3</span>) <span class="sc">+</span></span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">coord_cartesian</span>(<span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">3</span>)) <span class="sc">+</span></span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(</span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>    <span class="at">x =</span> <span class="st">&quot;x (corresponds to loss level)&quot;</span>,</span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>    <span class="at">y =</span> <span class="st">&quot;Mean Evaluation of Causal Claim&quot;</span>,</span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>    <span class="at">fill =</span> <span class="st">&quot;Causal claim kind&quot;</span></span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span></span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_minimal</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
 <div>
@@ -2683,6 +2700,12 @@ window.Quarto = {
 </div>
 </div>
 </div>
+<p>TODO:</p>
+<ul>
+<li>add other measures</li>
+<li>fit cumulative logistic regression</li>
+<li>compare model fit</li>
+</ul>
 </section>
 </section>
 

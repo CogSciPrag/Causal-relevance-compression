@@ -17,14 +17,99 @@ execute:
 library(tidyverse)
 library(afex)
 library(glue)
+library(brms)
+library(knitr)
 ```
 
-# Kinney and Lombrozo (2024)
+# Causal Mutual Information Measures
+
+## Kinney and Lombrozo (2024)
+
+$$CMI (\mathbf{C},E) = \sum_{\mathbf{c},e}q(\mathbf{c})p(e\mid do(\mathbf{c}))\log_2\frac{p(e\mid do(\mathbf{c}))}{p(e)}$$
+
+Kinney and Lombrozo (2024) assumes that all variables are intervened on, and as such probability distribution $q$ becomes uniform. The effect $E$ is binary, e.g. blue wings/not blue wings, for the sake of generality let $E=\{0,1\}$. We can then write
+
+$$CMI (\mathbf{C},E) = \frac{1}{|\mathbf{C}|} \left(\sum_{\mathbf{c}}p(E=1\mid do(\mathbf{c}))\log_2\frac{p(E=1\mid do(\mathbf{c}))}{p(E=1)} +\sum_{\mathbf{c}}p(E=0\mid do(\mathbf{c}))\log_2\frac{p(E=0\mid do(\mathbf{c}))}{p(E=0)} \right),$$
+
+which corresponds to how `CMI_KL_orig` is computed in the code.
+
+```{r CMI_KL_orig}
+#| code-fold: false
+CMI_KL_orig <- function(prob_vector) {
+  # prob_vector: e.g. c(.85, .7, .01, .01)
+
+  probs1 <- prob_vector # probabilities that, e.g. Bricofly will develop blue wings
+  probs0 <- 1 - prob_vector # probabilities that, e.g. Bricofly will **not** develop blue wings
+
+  q_c <- 1 / length(probs1) #q(c) is simply a constant, since q is a uniform probability distribution
+
+  p1 <- 1 / length(probs1) * sum(probs1) # P(E=1)
+  p0 <- 1 / length(probs0) * sum(probs0) # P(E=0)
+
+  q_c * (sum(probs1 * log2(probs1 / p1)) + sum(probs0 * log2(probs0 / p0)))
+}
+
+compress <- function(prob_vector) {
+  # compressing a 4x4 probability table to a 2x2 table
+
+  c(mean(prob_vector[1:2]), mean(prob_vector[3:4]))
+}
+
+loss_KL_orig <- function(prob_vector) {
+  CMI_KL_orig(prob_vector) - CMI_KL_orig(compress(prob_vector))
+}
+```
+
+```{r CMI_KL_orig_predictions}
+#| code-summary: "Predictions table"
+tibble(
+  x = c("70", "85", "98"),
+  CMI_KL_orig_not_compressed = c(
+    CMI_KL_orig(c(.7, .7, .01, .01)) |> round(2),
+    CMI_KL_orig(c(.85, .7, .01, .01)) |> round(2),
+    CMI_KL_orig(c(.98, .7, .01, .01)) |> round(2)
+  ),
+  CMI_KL_orig_compressed = c(
+    CMI_KL_orig(compress(c(.7, .7, .01, .01))) |> round(2),
+    CMI_KL_orig(compress(c(.85, .7, .01, .01))) |> round(2),
+    CMI_KL_orig(compress(c(.98, .7, .01, .01))) |> round(2)
+  ),
+  KL_orig_loss = c(
+    loss_KL_orig(c(.7, .7, .01, .01)) |> round(2),
+    loss_KL_orig(c(.85, .7, .01, .01)) |> round(2),
+    loss_KL_orig(c(.98, .7, .01, .01)) |> round(2)
+  )
+) |>
+  kable()
+```
+
+## Our approach: triple-C
+TODO
+
+## NSM
+TODO
+
+## CESM
+TODO
+
+# Comparison: Kinney and Lombrozo (2024)
 
 ### Experiment 1
+We wrangle the data from Experiment 1, and initialise `KLexp1_measures` with data from the experiment and predictions given by `KL_orig` measure.
 
-```{r KLexp1-processing}
-#| code-summary: "Load & process data"
+Base structure of the KLexp1_measures dataset is as follows:
+
+-   `pid` — Participant ID.
+-   `vignette` — `Bricofly` / `Chapagite` / `Drol`; between-subjects
+-   `compression_kind` — `Prop` or `Stab`; between-subjects
+-   `claim_kind` — `Comp` / `High` / `Low`. Three kinds of statements visible at once on one screen.
+-   `x_val` — Value of `x` in the vignette. Three levels: 70, 85, 98 which correspond to different amounts of loss. Between-subjects.
+-   `participant_response` — participant's rating 'how good it would be to include each of the following statements in a summary of this report'; scale from -3 (very bad) to 3 (very good)
+
+This is then accompanied by prediction values given by various tested measures.
+
+```{r KL-exp1-wrangling}
+#| code-summary: "Data Wrangling"
 
 rawexp1 <- read_csv(
   "KinneyLombrozo2024/Data/study_1_data.csv",
@@ -34,7 +119,7 @@ rawexp1 <- read_csv(
 # glue('Raw data: {nrow(rawexp1)} rows, {ncol(rawexp1)} columns.')
 
 # Drop the two Qualtrics label rows (question text and ImportId).
-KLexp1_wide <- rawexp1 |> slice(-(1:2))
+KLexp1df <- rawexp1 |> slice(-(1:2))
 
 # Keep only participants who passed the comprehension check for their
 # vignette. (%in% treats NA as a non-match, mirroring the original logic.)
@@ -45,7 +130,7 @@ KLexp1_wide <- rawexp1 |> slice(-(1:2))
 # answers. Here every participant is checked. If those last two rows
 # happened to fail the check, sample sizes will differ slightly from the
 # original output.
-KLexp1_wide <- KLexp1_wide |>
+KLexp1df <- KLexp1df |>
   filter(
     D_CompCheck %in%
       "Drol" |
@@ -53,7 +138,7 @@ KLexp1_wide <- KLexp1_wide |>
       C_CompCheck %in% "Chapagite"
   )
 
-# glue('After comprehension check: {nrow(KLexp1_wide)} rows, {ncol(KLexp1_wide)} columns.')
+# glue('After comprehension check: {nrow(KLexp1df)} rows, {ncol(KLexp1df)} columns.')
 
 # Remove all data from participants who rated any of the poor ("Bad")
 # causal claims positively (i.e., gave a rating of 0, 1, 2, or 3).
@@ -61,123 +146,20 @@ KLexp1_wide <- KLexp1_wide |>
 # As in the original, missing values do not trigger exclusion.
 bad_cols <- grep(
   "^[BCD]_(Prop|Stab)(Comp|High|Low)Bad(70|85|98)_1$",
-  names(KLexp1_wide),
+  names(KLexp1df),
   value = TRUE
 )
 stopifnot(length(bad_cols) == 54)
 
-KLexp1_wide <- KLexp1_wide |>
+KLexp1df <- KLexp1df |>
   filter(!if_any(all_of(bad_cols), \(x) x %in% c("0", "1", "2", "3"))) |>
   mutate(pid = row_number())
 
-# glue('After bad claim filtering: {nrow(KLexp1_wide)} rows, {ncol(KLexp1_wide)} columns.')
-```
+# glue('After bad claim filtering: {nrow(KLexp1df)} rows, {ncol(KLexp1df)} columns.')
 
-The following function `loss` corresponds to $\mathscr{L}$ in the equation from Kinney and Lombrozo (2024):
-$$\mathscr{L}(\mathbf{C}, \widehat{\mathbf{C}},E) = CMI(\mathbf{C},E) - CMI(\widehat{\mathbf{C}},E)$$
-```{r loss-function}
-#| code-fold: show
+exp_cols <- grep("^[BCD]_(Prop|Stab)", names(KLexp1df), value = TRUE)
 
-kl <- function(p, q) sum(p * log2(p / q))
-# Kullback–Leibler divergence in bits, equivalent to `scipy.stats.entropy(p, q, base = 2)` in the original code
-
-loss <- function(x) {
-  conditional_noncomp1 <- c(.01, .99)
-  conditional_noncomp2 <- c(.01, .99)
-  conditional_noncomp3 <- c(.70, .30)
-  conditional_noncomp4 <- c(x, 1 - x)
-  conditional_comp1 <- c(.01, .99)
-  conditional_comp2 <- c((.7 + x) / 2, 1 - (.7 + x) / 2)
-
-  m <- .01 * .5 + .7 * .25 + x * .25
-  marginal <- c(m, 1 - m)
-
-  cmi_noncomp <- .25 *
-    kl(conditional_noncomp1, marginal) +
-    .25 * kl(conditional_noncomp2, marginal) +
-    .25 * kl(conditional_noncomp3, marginal) +
-    .25 * kl(conditional_noncomp4, marginal)
-  cmi_comp <- .50 *
-    kl(conditional_comp1, marginal) +
-    .50 * kl(conditional_comp2, marginal)
-
-  cmi_noncomp - cmi_comp
-}
-```
-
-We construct the final processed dataframe for Experiment 1, `KLexp1`, including the loss values for each condition and the difference scores used in the original analysis:
-
-- `pid` — Participant ID.
-- `vignette` — `Bricofly` / `Chapagite` / `Drol`; between-subjects
-- `compression_kind` — `Prop` or `Stab`; between-subjects
-- `claim_kind` — `Comp` / `High` / `Low`. Three kinds of statements visible at once on one screen.
-- `x_val` — Value of `x` in the vignette. Three levels: 70, 85, 98 which correspond to different amounts of loss. Between-subjects.
-- `loss_val` — Loss value computed from `x_val` using the `loss` function above.
-- `participant_response` — participant's rating 'how good it would be to include each of the following statements in a summary of this report'; scale from -3 (very bad) to 3
-(very good)
-- `comp_eval`, `high_eval`, `low_eval` — Evaluations of each claim type.
-- `comp_high_diff` — `comp_eval - high_eval`
-- `comp_avg_diff` — `comp_eval - (0.5 * high_eval + 0.5 * low_eval)`
-- `high_low_diff` — `high_eval - low_eval`
-- `feedback` — Feedback from participants
-
-In addition, we create a separate dataframe `KLexp1_measures` which contains the columns needed for the comparison of causal relevance measures, including the original KL's loss values as `KL_measure_orig`:
-
-```{r KL-exp1-wrangling}
-#| code-summary: "Data Wrangling"
-
-KLexp1_wide <- KLexp1_wide |>
-  mutate(
-    vignette_prefix = case_match(
-      Vignette,
-      "Bricofly" ~ "B",
-      "Chapagite" ~ "C",
-      "Drol" ~ "D"
-    ),
-    loss_level = case_match(
-      Group,
-      c("Prop_No_Loss", "Stab_No_Loss") ~ "70",
-      c("Prop_Loss_1", "Stab_Loss_1") ~ "85",
-      c("Prop_Loss_2", "Stab_Loss_2") ~ "98"
-    ),
-    loss_val = case_match(
-      Group,
-      c("Prop_No_Loss", "Stab_No_Loss") ~ loss(.70),
-      c("Prop_Loss_1", "Stab_Loss_1") ~ loss(.85),
-      c("Prop_Loss_2", "Stab_Loss_2") ~ loss(.98)
-    ),
-    mode_label = if_else(str_starts(Group, "Prop"), "Prop", "Stab")
-  )
-
-# Pull each participant's rating of a given claim from the column that
-# matches their vignette / mode / loss condition.
-pick_eval <- function(df, claim) {
-  cols <- paste0(
-    df$vignette_prefix,
-    "_",
-    df$mode_label,
-    claim,
-    "Good",
-    df$loss_level,
-    "_1"
-  )
-  m <- as.matrix(df[, unique(cols)])
-  as.numeric(m[cbind(seq_len(nrow(df)), match(cols, colnames(m)))])
-}
-
-KLexp1_wide <- KLexp1_wide |>
-  mutate(
-    comp_eval = pick_eval(KLexp1_wide, "Comp"),
-    high_eval = pick_eval(KLexp1_wide, "High"),
-    low_eval = pick_eval(KLexp1_wide, "Low"),
-    comp_high_diff = comp_eval - high_eval,
-    comp_avg_diff = comp_eval - (0.5 * high_eval + 0.5 * low_eval),
-    high_low_diff = high_eval - low_eval
-  )
-
-exp_cols <- grep("^[BCD]_(Prop|Stab)", names(KLexp1_wide), value = TRUE)
-
-KLexp1_long <- KLexp1_wide |>
+KLexp1_long <- KLexp1df |>
   pivot_longer(
     all_of(exp_cols),
     names_to = c(
@@ -195,46 +177,39 @@ KLexp1_long <- KLexp1_wide |>
   )
 
 KLexp1 <- KLexp1_long |>
-  mutate(
-    compression_kind = factor(compression_kind, levels = c("Prop", "Stab")),
-    claim_kind = factor(claim_kind, levels = c("Comp", "High", "Low"))
-  ) |>
+  filter(claim_valence == "Good") |>
   rename(
     vignette = Vignette,
-    feedback = Feedback,
     participant_response = rating
   ) |>
-  filter(claim_valence == "Good") |>
+  mutate(
+    compression_kind = factor(compression_kind, levels = c("Prop", "Stab")),
+    claim_kind = factor(claim_kind, levels = c("Comp", "High", "Low")),
+    CMI_KL_orig = map2_dbl(x_val, claim_kind, \(x, k) {
+      if (k == "Comp") {
+        CMI_KL_orig(compress(c(x / 100, .7, .01, .01)))
+      } else if (k == "High") {
+        CMI_KL_orig(c(x / 100, .7, .01, .01))
+      } else {
+        CMI_KL_orig(c(.7, .7, .01, .01))
+      }
+    })
+  ) |>
   select(
     pid,
-
     vignette,
     compression_kind,
     claim_kind,
     x_val,
-    loss_val,
-
     participant_response,
-
-    comp_eval,
-    high_eval,
-    low_eval,
-    comp_high_diff,
-    comp_avg_diff,
-    high_low_diff,
-
-    feedback
+    CMI_KL_orig
   )
 
-KLexp1_measures <- KLexp1 |>
-    select(pid, vignette, compression_kind, claim_kind, x_val, participant_response,loss_val) |>
-    rename(
-        KL_measure_orig = loss_val
-    )
-head(KLexp1_measures)
+glimpse(KLexp1)
 ```
 
 We can now make a plot which corresponds to Fig. 2 in the paper:
+
 ```{r KL-exp1-fig2}
 KLexp1 |>
   filter(claim_kind != "Low") |>
@@ -261,10 +236,14 @@ KLexp1 |>
   theme_minimal()
 ```
 
-Adding `low` to Fig. 2:
+Adding `low`, we get:
+
 ```{r KL-exp1-fig2-with-low}
 
-ggplot(KLexp1, aes(x = factor(x_val), y = participant_response, fill = claim_kind)) +
+ggplot(
+  KLexp1,
+  aes(x = factor(x_val), y = participant_response, fill = claim_kind)
+) +
   stat_summary(
     fun = mean,
     geom = "col",
@@ -289,6 +268,8 @@ ggplot(KLexp1, aes(x = factor(x_val), y = participant_response, fill = claim_kin
 
 
 
+TODO:
 
-
-
+- add other measures
+- fit cumulative logistic regression
+- compare model fit
