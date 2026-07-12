@@ -6,6 +6,16 @@ format:
     embed-resources: true
     toc: true
     code-fold: true
+    include-in-header:
+      text: |
+        <script>
+        window.MathJax = {
+          tex: { macros: {
+            llbracket: "[\\mkern-3.5mu[",
+            rrbracket: "]\\mkern-3.5mu]"
+          }}
+        };
+        </script>
 execute:
   warning: false
   message: false
@@ -21,25 +31,29 @@ library(brms)
 library(knitr)
 ```
 
+
+We are exploring differnet ways to formally define **Causal Relevance**
+
+$$CS(C,S)$$
+where $S$ is a sentence in context $C$.
+
 # Causal Mutual Information Measures
 
-## Kinney and Lombrozo (2024)
+Causal mutual information is defined as:
+$$cMI (X,Y) = \sum_{x,y}q(x)p(y\mid do(x))\log_2\frac{p(y\mid do(x))}{p(y)}$$
 
-$$CMI (\mathbf{C},E) = \sum_{\mathbf{c},e}q(\mathbf{c})p(e\mid do(\mathbf{c}))\log_2\frac{p(e\mid do(\mathbf{c}))}{p(e)}$$
+Kinney and Lombrozo (2024) assumes that all variables are intervened on, and as such the intervention prior is flat. The effect $Y$ is binary, e.g. blue wings/not blue wings, for the sake of generality let $Y=\{0,1\}$. We can then write
 
-Kinney and Lombrozo (2024) assumes that all variables are intervened on, and as such probability distribution $q$ becomes uniform. The effect $E$ is binary, e.g. blue wings/not blue wings, for the sake of generality let $E=\{0,1\}$. We can then write
+$$cMI (X,Y) = \frac{1}{|X|} \left(\sum_{x}p(Y=1\mid do(x))\log_2\frac{p(Y=1\mid do(x))}{p(Y=1)} +\sum_{x}p(Y=0\mid do(x))\log_2\frac{p(Y=0\mid do(x))}{p(Y=0)} \right)$$
 
-$$CMI (\mathbf{C},E) = \frac{1}{|\mathbf{C}|} \left(\sum_{\mathbf{c}}p(E=1\mid do(\mathbf{c}))\log_2\frac{p(E=1\mid do(\mathbf{c}))}{p(E=1)} +\sum_{\mathbf{c}}p(E=0\mid do(\mathbf{c}))\log_2\frac{p(E=0\mid do(\mathbf{c}))}{p(E=0)} \right),$$
-
-which corresponds to how `CMI_KL_orig` is computed in the code.
-
-```{r CMI_KL_orig}
+This corresponds to how `cMI` is calculated in the code and closely mirrors the computation shown in Kinney and Lombrozo (2024).
+```{r cMI}
 #| code-fold: false
-CMI_KL_orig <- function(prob_vector) {
-  # prob_vector: e.g. c(.85, .7, .01, .01)
+cMI <- function(probs, grouping) {
+  grouped_probs <- sapply(split(probs, grouping), mean)
 
-  probs1 <- prob_vector # probabilities that, e.g. Bricofly will develop blue wings
-  probs0 <- 1 - prob_vector # probabilities that, e.g. Bricofly will **not** develop blue wings
+  probs1 <- grouped_probs # probabilities that, e.g. Bricofly will develop blue wings
+  probs0 <- 1 - grouped_probs # probabilities that, e.g. Bricofly will **not** develop blue wings
 
   q_c <- 1 / length(probs1) #q(c) is simply a constant, since q is a uniform probability distribution
 
@@ -48,56 +62,117 @@ CMI_KL_orig <- function(prob_vector) {
 
   q_c * (sum(probs1 * log2(probs1 / p1)) + sum(probs0 * log2(probs0 / p0)))
 }
+```
 
-compress <- function(prob_vector) {
-  # compressing a 4x4 probability table to a 2x2 table
+### KL's Compressed Causal Models
 
-  c(mean(prob_vector[1:2]), mean(prob_vector[3:4]))
-}
+$$CS_{KL}(C,S) = cMI(X,Y)-cMI(X_s,Y)$$
+$X_s$ may be a null compression, in which case the measure simplifies to $CS_{KL}(C,S) = CMI(X,Y)$.
 
-loss_KL_orig <- function(prob_vector) {
-  CMI_KL_orig(prob_vector) - CMI_KL_orig(compress(prob_vector))
+```{r KL}
+#| code-fold: false
+KL_CS <- function(probs, uncompressed_grouping, compressed_grouping = NULL) {
+  # special case: null compression
+  if (is.null(compressed_grouping)) {
+    return(cMI(probs, uncompressed_grouping))
+  }
+
+  cMI(probs, uncompressed_grouping) - cMI(probs, compressed_grouping)
 }
 ```
 
-```{r CMI_KL_orig_predictions}
-#| code-summary: "Predictions table"
+### MF's Causal Compression for Communciation
+
+$$CS_{MF}(C,S) = \sum_{i}w_i\:cMI(X_i,Y)$$
+```{r MF}
+#| code-fold: false
+MF_CS <- function(probs, grouping_list, weights = c(1)) {
+  sum(weights * vapply(grouping_list, \(g) cMI(probs, g), numeric(1)))
+}
+```
+
+However, it may be possible that S can represented in X in several ways. For example, High sentences from experiment 1 below, assuming X is a four-way categorical variable, can be $\llbracket S_{high}\rrbracket = \{x_1,x_2,x_3,x_4\},$ referred to as 'finest'below, or $\llbracket S_{high} \rrbracket = \{x_1,\{x_2,x_3,x_4\}\},$ referred to as 'one_vs_rest' below.
+The grouping arguments in `cMI`, `KL_CS`, and `MF_CS` allow us to define the desired granularity. Comparing finest and one_vs_rest in `KL_CS` in the $x=85$ situation gives us:
+
+```{r granularity-comparison}
+#| code-fold: false
 tibble(
-  x = c("70", "85", "98"),
-  CMI_KL_orig_not_compressed = c(
-    CMI_KL_orig(c(.7, .7, .01, .01)) |> round(2),
-    CMI_KL_orig(c(.85, .7, .01, .01)) |> round(2),
-    CMI_KL_orig(c(.98, .7, .01, .01)) |> round(2)
-  ),
-  CMI_KL_orig_compressed = c(
-    CMI_KL_orig(compress(c(.7, .7, .01, .01))) |> round(2),
-    CMI_KL_orig(compress(c(.85, .7, .01, .01))) |> round(2),
-    CMI_KL_orig(compress(c(.98, .7, .01, .01))) |> round(2)
-  ),
-  KL_orig_loss = c(
-    loss_KL_orig(c(.7, .7, .01, .01)) |> round(2),
-    loss_KL_orig(c(.85, .7, .01, .01)) |> round(2),
-    loss_KL_orig(c(.98, .7, .01, .01)) |> round(2)
+  granularity = c("finest", "one_vs_rest"),
+  KL_CS = c(
+    KL_CS(c(.85, .7, .01, .01), c(1, 2, 3, 4)) |> round(2),
+    KL_CS(c(.85, .7, .01, .01), c(1, 2, 2, 2)) |> round(2)
   )
 ) |>
   kable()
 ```
 
-## Our approach: triple-C
-TODO
-
-## NSM
-TODO
-
-## CESM
-TODO
-
 # Comparison: Kinney and Lombrozo (2024)
 
 ### Experiment 1
-We wrangle the data from Experiment 1, and initialise `KLexp1_measures` with data from the experiment and predictions given by `KL_orig` measure.
 
-Base structure of the KLexp1_measures dataset is as follows:
+Table below is an overview of the measures applied to the Experiment 1.
+
+```{r overview-table}
+probs_70 <- c(.7, .7, .01, .01)
+probs_85 <- c(.85, .7, .01, .01)
+probs_98 <- c(.98, .7, .01, .01)
+
+
+finest_grouping <- c(1, 2, 3, 4)
+one_vs_rest_grouping <- c(1, 2, 2, 2)
+compressed_grouping <- c(1, 1, 2, 2)
+
+results <- tibble(
+  x = c("70", "85", "98"),
+  'KL_finest_cMI' = c(
+    KL_CS(probs_70, finest_grouping) |> round(2),
+    KL_CS(probs_85, finest_grouping) |> round(2),
+    KL_CS(probs_98, finest_grouping) |> round(2)
+  ),
+  'KL_one_vs_rest_cMI' = c(
+    KL_CS(probs_70, one_vs_rest_grouping) |> round(2),
+    KL_CS(probs_85, one_vs_rest_grouping) |> round(2),
+    KL_CS(probs_98, one_vs_rest_grouping) |> round(2)
+  ),
+  'KL_compressed_cMI' = c(
+    KL_CS(probs_70, compressed_grouping) |> round(2),
+    KL_CS(probs_85, compressed_grouping) |> round(2),
+    KL_CS(probs_98, compressed_grouping) |> round(2)
+  ),
+  '•KL_finest_CS' = c(
+    KL_CS(probs_70, finest_grouping, compressed_grouping) |> round(2),
+    KL_CS(probs_85, finest_grouping, compressed_grouping) |> round(2),
+    KL_CS(probs_98, finest_grouping, compressed_grouping) |> round(2)
+  ),
+  '•KL_one_vs_rest_CS' = c(
+    KL_CS(probs_70, one_vs_rest_grouping, compressed_grouping) |> round(2),
+    KL_CS(probs_85, one_vs_rest_grouping, compressed_grouping) |> round(2),
+    KL_CS(probs_98, one_vs_rest_grouping, compressed_grouping) |> round(2)
+  ),
+  'MF_cMI' = c(
+    MF_CS(probs_70, list(one_vs_rest_grouping, finest_grouping), c(1, 1)) |>
+      round(2),
+    MF_CS(probs_85, list(one_vs_rest_grouping, finest_grouping), c(1, 1)) |>
+      round(2),
+    MF_CS(probs_98, list(one_vs_rest_grouping, finest_grouping), c(1, 1)) |>
+      round(2)
+  ),
+  'MF_compressed_cMI' = c(
+    MF_CS(probs_70, list(compressed_grouping)) |> round(2),
+    MF_CS(probs_85, list(compressed_grouping)) |> round(2),
+    MF_CS(probs_98, list(compressed_grouping)) |> round(2)
+  ),
+  '•MF_CS' = c("?", "?", "?")
+)
+
+results |>
+  column_to_rownames("x") |>
+  t() |>
+  kable()
+```
+
+
+To compare how well these measures model participant data, we wrangle the data from Experiment 1 and initialise `KLexp1` with columns:
 
 -   `pid` — Participant ID.
 -   `vignette` — `Bricofly` / `Chapagite` / `Drol`; between-subjects
@@ -106,7 +181,7 @@ Base structure of the KLexp1_measures dataset is as follows:
 -   `x_val` — Value of `x` in the vignette. Three levels: 70, 85, 98 which correspond to different amounts of loss. Between-subjects.
 -   `participant_response` — participant's rating 'how good it would be to include each of the following statements in a summary of this report'; scale from -3 (very bad) to 3 (very good)
 
-This is then accompanied by prediction values given by various tested measures.
+We then add predictions given by the different measures on each trial.
 
 ```{r KL-exp1-wrangling}
 #| code-summary: "Data Wrangling"
@@ -184,16 +259,7 @@ KLexp1 <- KLexp1_long |>
   ) |>
   mutate(
     compression_kind = factor(compression_kind, levels = c("Prop", "Stab")),
-    claim_kind = factor(claim_kind, levels = c("Comp", "High", "Low")),
-    CMI_KL_orig = map2_dbl(x_val, claim_kind, \(x, k) {
-      if (k == "Comp") {
-        CMI_KL_orig(compress(c(x / 100, .7, .01, .01)))
-      } else if (k == "High") {
-        CMI_KL_orig(c(x / 100, .7, .01, .01))
-      } else {
-        CMI_KL_orig(c(.7, .7, .01, .01))
-      }
-    })
+    claim_kind = factor(claim_kind, levels = c("Comp", "High", "Low"))
   ) |>
   select(
     pid,
@@ -201,14 +267,48 @@ KLexp1 <- KLexp1_long |>
     compression_kind,
     claim_kind,
     x_val,
-    participant_response,
-    CMI_KL_orig
+    participant_response
+  )
+
+KLexp1 <- KLexp1 |>
+  mutate(
+    KL_finest_CS = map2(x_val, claim_kind, \(x, k) {
+      switch(
+        k,
+        Comp = KL_CS(c(x / 100, .7, .01, .01), compressed_grouping),
+        High = KL_CS(c(x / 100, .7, .01, .01), finest_grouping),
+        KL_CS(c(.7, .7, .01, .01), finest_grouping),
+      )
+    }),
+    KL_one_vs_rest_CS = map2(x_val, claim_kind, \(x, k) {
+      switch(
+        k,
+        Comp = KL_CS(c(x / 100, .7, .01, .01), compressed_grouping),
+        High = KL_CS(c(x / 100, .7, .01, .01), one_vs_rest_grouping),
+        KL_CS(c(.7, .7, .01, .01), one_vs_rest_grouping),
+      )
+    }),
+    MF_CS = map2(x_val, claim_kind, \(x, k) {
+      switch(
+        k,
+        Comp = MF_CS(c(x / 100, .7, .01, .01), list(compressed_grouping)),
+        High = MF_CS(
+          c(x / 100, .7, .01, .01),
+          list(one_vs_rest_grouping, finest_grouping),
+          c(1, 1)
+        ),
+        MF_CS(
+          c(.7, .7, .01, .01),
+          list(one_vs_rest_grouping, finest_grouping, c(1, 1))
+        )
+      )
+    })
   )
 
 glimpse(KLexp1)
 ```
 
-We can now make a plot which corresponds to Fig. 2 in the paper:
+As an aside, we can now make a plot which corresponds to Fig. 2 in the paper:
 
 ```{r KL-exp1-fig2}
 KLexp1 |>
@@ -236,7 +336,7 @@ KLexp1 |>
   theme_minimal()
 ```
 
-Adding `low`, we get:
+And plotting also `low`, we get:
 
 ```{r KL-exp1-fig2-with-low}
 
@@ -266,9 +366,7 @@ ggplot(
   theme_minimal()
 ```
 
-
-
-TODO:
+TODOs:
 
 - add other measures
 - fit cumulative logistic regression
