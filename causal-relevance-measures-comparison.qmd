@@ -1,6 +1,5 @@
 ---
 title: "Comparing Measures of Causal Relevance"
-author: "Erik Zeiner"
 format:
   html:
     embed-resources: true
@@ -63,11 +62,11 @@ where $S$ is a sentence in context $C$.
 Causal mutual information is defined as:
 $$cMI (X,Y) = \sum_{x,y}q(x)p(y\mid do(x))\log_2\frac{p(y\mid do(x))}{p(y)}$$
 
-Kinney and Lombrozo (2024) assumes that all variables are intervened on, and as such the intervention prior is flat. The effect $Y$ is binary, e.g. blue wings/not blue wings, for the sake of generality let $Y=\{0,1\}$. We can then write
+Kinney and Lombrozo (2024) assume that all variables are intervened on, and as such the intervention prior is flat. The effect $Y$ is binary, e.g. blue wings/not blue wings. For the sake of generality let $Y=\{0,1\}$. We can then write:
 
-$$cMI (X,Y) = \frac{1}{|X|} \left(\sum_{x}p(Y=1\mid do(x))\log_2\frac{p(Y=1\mid do(x))}{p(Y=1)} +\sum_{x}p(Y=0\mid do(x))\log_2\frac{p(Y=0\mid do(x))}{p(Y=0)} \right)$$
+$$cMI (X,Y) = \frac{1}{|X|} \left(\sum_{x}p(Y=1\mid do(x))\log_2\frac{p(Y=1\mid do(x))}{p(Y=1)} +\sum_{x}p(Y=0\mid do(x))\log_2\frac{p(Y=0\mid do(x))}{p(Y=0)} \right),$$
 
-This corresponds to how `cMI` is calculated in the code and closely mirrors the computation shown in Kinney and Lombrozo (2024).
+which corresponds to how `cMI` is calculated in the code below and closely mirrors the computation shown in Kinney and Lombrozo (2024).
 ```{r cMI}
 #| code-fold: false
 cMI <- function(probs, grouping) {
@@ -112,7 +111,8 @@ MF_CS <- function(probs, grouping_list, weights = c(1)) {
 }
 ```
 
-However, it may be possible that S can represented in X in several ways. For example, High sentences from experiment 1 below, assuming X is a four-way categorical variable, can be $\llbracket S_{high}\rrbracket = \{\{x_1\},\{x_2\},\{x_3\},\{x_4\}\},$ referred to as *finest* below, or $\llbracket S_{high} \rrbracket = \{\{x_1\},\{x_2,x_3,x_4\}\},$ referred to as *one_vs_rest* below.
+Sentence S semantically denotes a partition of subsets of a subset of variables. For example, High sentences from experiment 1 below, assuming X is a four-way categorical variable, can be $$\llbracket S_{high}\rrbracket = \{\{x_1\},\{x_2\},\{x_3\},\{x_4\}\},$$ referred to as *finest* below, or $$\llbracket S_{high} \rrbracket = \{\{x_1\},\{x_2,x_3,x_4\}\},$$ referred to as *one_vs_rest* below.
+
 The grouping arguments in `cMI`, `KL_CS`, and `MF_CS` allow us to define the desired granularity. Comparing *finest* and *one_vs_rest* in `KL_CS` in the $x=85$ situation gives us:
 
 ```{r granularity-comparison}
@@ -133,7 +133,7 @@ Kinney and Lombrozo (2024) use **only *finest* representations** in their model.
 
 ## Experiment 1
 
-Table below is an overview of the measures applied to the Experiment 1.
+Table below is an overview of the measures applied to Experiment 1.
 
 ```{r overview-table}
 probs_70 <- c(.7, .7, .01, .01)
@@ -197,17 +197,18 @@ results |>
 ```
 
 
-To compare how well these measures model participant data, we wrangle the data from Experiment 1 and initialise `KLexp1` with columns:
+To compare how well these measures model participant data, we first wrangle the data from Experiment 1 and initialise `KLexp1` with columns:
 
--   `pid` — Participant ID.
--   `vignette` — `Bricofly` / `Chapagite` / `Drol`; between-subjects
--   `compression_kind` — `Prop` or `Stab`; between-subjects
--   `claim_kind` — `Comp` / `High` / `Low`. Three kinds of statements visible at once on one screen.
--   `x_val` — Value of `x` in the vignette. Three levels: 70, 85, 98 which correspond to different amounts of loss. Between-subjects.
--   `participant_response` — participant's rating 'how good it would be to include each of the following statements in a summary of this report'; scale from -3 (very bad) to 3 (very good)
+-   `pid` — Participant ID,
+-   `vignette` — `Bricofly` / `Chapagite` / `Drol`; between-subjects,
+-   `compression_kind` — `Prop` or `Stab`; between-subjects,
+-   `claim_kind` — `Comp` / `High` / `Low`. Three kinds of statements visible at once on one screen,
+-   `x_val` — Value of `x` in the vignette. Three levels: 70, 85, 98 which correspond to different amounts of loss; Between-subjects,
+-   `participant_response` — participant's rating 'how good it would be to include each of the following statements in a summary of this report'; scale from -3 (very bad) to 3 (very good).
 
-We then add predictions given by the different measures on each trial.
+We then add predictions given by the different measures on each trial, fit cumulative logistic regression models and compare model fit.
 
+`KLexp1`:
 ```{r KL-exp1-wrangling}
 #| code-summary: "Data Wrangling"
 
@@ -284,7 +285,8 @@ KLexp1 <- KLexp1_long |>
   ) |>
   mutate(
     compression_kind = factor(compression_kind, levels = c("Prop", "Stab")),
-    claim_kind = factor(claim_kind, levels = c("Comp", "High", "Low"))
+    claim_kind = factor(claim_kind, levels = c("Comp", "High", "Low")),
+    pid = factor(pid)
   ) |>
   select(
     pid,
@@ -391,8 +393,8 @@ KLexp1 |>
   theme_minimal()
 ```
 
-And we can visualise predictions from the various measures:
-```{r}
+And we can visualise output values from the various CS variants:
+```{r outputs-plot}
 KL_finest_plot <- KLexp1 |>
   ggplot(aes(x = factor(x_val), y = KL_finest_CS, fill = claim_kind)) +
   stat_summary(
@@ -407,7 +409,7 @@ KL_finest_plot <- KLexp1 |>
     x = "x (corresponds to loss level)",
     y = "CS",
     fill = "Causal claim kind",
-    title = "Predictions from KL_finest_CS"
+    title = "Values from KL_finest_CS"
   ) +
   theme_minimal()
 
@@ -425,7 +427,7 @@ KL_one_vs_rest_plot <- KLexp1 |>
     x = "x (corresponds to loss level)",
     y = "CS",
     fill = "Causal claim kind",
-    title = "Predictions from KL_one_vs_rest_CS"
+    title = "Values from KL_one_vs_rest_CS"
   ) +
   theme_minimal()
 
@@ -445,7 +447,7 @@ MF_plot <- KLexp1 |>
     y = "CS",
     fill = "Causal claim kind",
     title = paste0(
-      "Predictions from MF_CS  (weights: one_vs_rest ",
+      "Values from MF_CS  (weights: one_vs_rest ",
       toString(MF_weights[1]),
       ", finest ",
       toString(MF_weights[2]),
@@ -461,38 +463,84 @@ MF_plot <- KLexp1 |>
   theme(legend.position = "bottom")
 ```
 
-
-TODOs:
-
-- add other measures
-- fit cumulative logistic regression
-- compare model fit
-
-
 ### Fitting cumulative logistic regression
 
-
 ```{r fit-setup}
-factor_response <- function(data) {
-  data |>
+#| code-summary: "Setup"
+KLexp1 <- KLexp1 |>
     mutate(
-      participant_response = factor(
-        participant_response,
-        levels = -3:3,
-        ordered = TRUE
-      )
+      participant_response = ordered(participant_response, levels = -3:3),
+      x_val = factor(x_val)
     )
-}
 ```
 
-```{r}
-# fit_KL_finest <- brm(
-#   participant_response ~ claim_kind * KL_finest_CS + (1 | pid),
-#   data = factor_response(KLexp1),
-#   family = cumulative()
-# )
-# fit_KL_one_vs_rest <- NULL
-# fit_MF <- NULL
+<!-- ```{r}
+fit_human <- brm(
+  participant_response ~ claim_kind * x_val + (1 | pid),
+  data = KLexp1,
+  family = cumulative(),
+  file = "models/fit_human",
+  file_refit = "on_change"
+)
+summary(fit_human)
+``` -->
+
+
+#### KL finest
+
+```{r fit-kl-finest}
+fit_KL_finest <- brm(
+  participant_response ~ KL_finest_CS + (1 | pid),
+  data = KLexp1,
+  family = cumulative(),
+  file = "models/fit_KL_finest",
+  file_refit = "on_change"
+)
+summary(fit_KL_finest)
 ```
 
+#### KL one-vs-rest
+
+```{r fit-kl-one-vs-rest}
+fit_KL_one_vs_rest <- brm(
+  participant_response ~ KL_one_vs_rest_CS + (1 | pid),
+  data = KLexp1,
+  family = cumulative(),
+  file = "models/fit_KL_one_vs_rest",
+  file_refit = "on_change"
+)
+summary(fit_KL_one_vs_rest)
+```
+
+#### MF (combination)
+
+```{r fit-kl-both}
+# without set p
+fit_MF <- brm(
+  participant_response ~ KL_finest_CS + KL_one_vs_rest_CS + (1 | pid),
+  data = KLexp1,
+  family = cumulative(),
+  file = "models/fit_MF",
+  file_refit = "on_change"
+)
+summary(fit_MF)
+```
+
+#### Model comparison (LOO-CV)
+
+```{r loo-comparison}
+loo_comp <- loo_compare(list(
+  KL_finest      = loo(fit_KL_finest),
+  KL_one_vs_rest = loo(fit_KL_one_vs_rest),
+  MF             = loo(fit_MF)
+))
+loo_comp
+```
+
+**Lambert's z-test**
+```{r lambert}
+#| code-fold: false
+1 - pnorm(-loo_comp[2, 1], loo_comp[2, 2])
+1 - pnorm(-loo_comp[3, 1], loo_comp[3, 2])
+```
 
