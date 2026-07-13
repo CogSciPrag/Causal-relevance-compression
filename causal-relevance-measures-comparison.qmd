@@ -29,6 +29,27 @@ library(afex)
 library(glue)
 library(brms)
 library(knitr)
+library(faintr)
+library(cspplot)
+library(patchwork)
+
+# these options help Stan run faster
+options(mc.cores = parallel::detectCores(), brms.backend = "cmdstanr")
+
+# use the CSP-theme for plotting
+theme_set(theme_csp())
+
+# global color scheme from CSP
+project_colors <- cspplot::list_colors() |> pull(hex)
+
+# setting theme colors globally
+scale_colour_discrete <- function(...) {
+  scale_colour_manual(..., values = project_colors)
+}
+
+scale_fill_discrete <- function(...) {
+  scale_fill_manual(..., values = project_colors)
+}
 ```
 
 
@@ -91,8 +112,8 @@ MF_CS <- function(probs, grouping_list, weights = c(1)) {
 }
 ```
 
-However, it may be possible that S can represented in X in several ways. For example, High sentences from experiment 1 below, assuming X is a four-way categorical variable, can be $\llbracket S_{high}\rrbracket = \{x_1,x_2,x_3,x_4\},$ referred to as 'finest'below, or $\llbracket S_{high} \rrbracket = \{x_1,\{x_2,x_3,x_4\}\},$ referred to as 'one_vs_rest' below.
-The grouping arguments in `cMI`, `KL_CS`, and `MF_CS` allow us to define the desired granularity. Comparing finest and one_vs_rest in `KL_CS` in the $x=85$ situation gives us:
+However, it may be possible that S can represented in X in several ways. For example, High sentences from experiment 1 below, assuming X is a four-way categorical variable, can be $\llbracket S_{high}\rrbracket = \{\{x_1\},\{x_2\},\{x_3\},\{x_4\}\},$ referred to as *finest* below, or $\llbracket S_{high} \rrbracket = \{\{x_1\},\{x_2,x_3,x_4\}\},$ referred to as *one_vs_rest* below.
+The grouping arguments in `cMI`, `KL_CS`, and `MF_CS` allow us to define the desired granularity. Comparing *finest* and *one_vs_rest* in `KL_CS` in the $x=85$ situation gives us:
 
 ```{r granularity-comparison}
 #| code-fold: false
@@ -106,9 +127,11 @@ tibble(
   kable()
 ```
 
+Kinney and Lombrozo (2024) use **only *finest* representations** in their model.
+
 # Comparison: Kinney and Lombrozo (2024)
 
-### Experiment 1
+## Experiment 1
 
 Table below is an overview of the measures applied to the Experiment 1.
 
@@ -122,47 +145,49 @@ finest_grouping <- c(1, 2, 3, 4)
 one_vs_rest_grouping <- c(1, 2, 2, 2)
 compressed_grouping <- c(1, 1, 2, 2)
 
+p <- .5
+MF_weights <- c(p, 1 - p)
+# MF_weights <- c(1,1)
 results <- tibble(
   x = c("70", "85", "98"),
-  'KL_finest_cMI' = c(
+  'KL_finest_CS' = c(
     KL_CS(probs_70, finest_grouping) |> round(2),
     KL_CS(probs_85, finest_grouping) |> round(2),
     KL_CS(probs_98, finest_grouping) |> round(2)
   ),
-  'KL_one_vs_rest_cMI' = c(
+  'KL_one_vs_rest_CS' = c(
     KL_CS(probs_70, one_vs_rest_grouping) |> round(2),
     KL_CS(probs_85, one_vs_rest_grouping) |> round(2),
     KL_CS(probs_98, one_vs_rest_grouping) |> round(2)
   ),
-  'KL_compressed_cMI' = c(
+  'KL_compressed_CS' = c(
     KL_CS(probs_70, compressed_grouping) |> round(2),
     KL_CS(probs_85, compressed_grouping) |> round(2),
     KL_CS(probs_98, compressed_grouping) |> round(2)
   ),
-  '•KL_finest_CS' = c(
+  'KL_finest_CS - KL_compressed_CS' = c(
     KL_CS(probs_70, finest_grouping, compressed_grouping) |> round(2),
     KL_CS(probs_85, finest_grouping, compressed_grouping) |> round(2),
     KL_CS(probs_98, finest_grouping, compressed_grouping) |> round(2)
   ),
-  '•KL_one_vs_rest_CS' = c(
+  'KL_one_vs_rest_CS - KL_compressed_CS' = c(
     KL_CS(probs_70, one_vs_rest_grouping, compressed_grouping) |> round(2),
     KL_CS(probs_85, one_vs_rest_grouping, compressed_grouping) |> round(2),
     KL_CS(probs_98, one_vs_rest_grouping, compressed_grouping) |> round(2)
   ),
-  'MF_cMI' = c(
-    MF_CS(probs_70, list(one_vs_rest_grouping, finest_grouping), c(1, 1)) |>
+  'MF_CS (weights: one_vs_rest {toString(MF_weights[1])}, finest {toString(MF_weights[2])})' := c(
+    MF_CS(probs_70, list(one_vs_rest_grouping, finest_grouping), MF_weights) |>
       round(2),
-    MF_CS(probs_85, list(one_vs_rest_grouping, finest_grouping), c(1, 1)) |>
+    MF_CS(probs_85, list(one_vs_rest_grouping, finest_grouping), MF_weights) |>
       round(2),
-    MF_CS(probs_98, list(one_vs_rest_grouping, finest_grouping), c(1, 1)) |>
+    MF_CS(probs_98, list(one_vs_rest_grouping, finest_grouping), MF_weights) |>
       round(2)
   ),
-  'MF_compressed_cMI' = c(
+  'MF_compressed_CS (weights: one_vs_rest {toString(MF_weights[1])}, finest {toString(MF_weights[2])})' := c(
     MF_CS(probs_70, list(compressed_grouping)) |> round(2),
     MF_CS(probs_85, list(compressed_grouping)) |> round(2),
     MF_CS(probs_98, list(compressed_grouping)) |> round(2)
-  ),
-  '•MF_CS' = c("?", "?", "?")
+  )
 )
 
 results |>
@@ -272,7 +297,7 @@ KLexp1 <- KLexp1_long |>
 
 KLexp1 <- KLexp1 |>
   mutate(
-    KL_finest_CS = map2(x_val, claim_kind, \(x, k) {
+    KL_finest_CS = map2_dbl(x_val, claim_kind, \(x, k) {
       switch(
         k,
         Comp = KL_CS(c(x / 100, .7, .01, .01), compressed_grouping),
@@ -280,7 +305,7 @@ KLexp1 <- KLexp1 |>
         KL_CS(c(.7, .7, .01, .01), finest_grouping),
       )
     }),
-    KL_one_vs_rest_CS = map2(x_val, claim_kind, \(x, k) {
+    KL_one_vs_rest_CS = map2_dbl(x_val, claim_kind, \(x, k) {
       switch(
         k,
         Comp = KL_CS(c(x / 100, .7, .01, .01), compressed_grouping),
@@ -288,19 +313,20 @@ KLexp1 <- KLexp1 |>
         KL_CS(c(.7, .7, .01, .01), one_vs_rest_grouping),
       )
     }),
-    MF_CS = map2(x_val, claim_kind, \(x, k) {
+    MF_CS = map2_dbl(x_val, claim_kind, \(x, k) {
       switch(
         k,
         Comp = MF_CS(c(x / 100, .7, .01, .01), list(compressed_grouping)),
         High = MF_CS(
           c(x / 100, .7, .01, .01),
           list(one_vs_rest_grouping, finest_grouping),
-          c(1, 1)
+          MF_weights
         ),
         MF_CS(
           c(.7, .7, .01, .01),
-          list(one_vs_rest_grouping, finest_grouping, c(1, 1))
-        )
+          list(one_vs_rest_grouping, finest_grouping),
+          MF_weights
+        ),
       )
     })
   )
@@ -308,7 +334,7 @@ KLexp1 <- KLexp1 |>
 glimpse(KLexp1)
 ```
 
-As an aside, we can now make a plot which corresponds to Fig. 2 in the paper:
+We can now make a plot which corresponds to Fig. 2 in the paper:
 
 ```{r KL-exp1-fig2}
 KLexp1 |>
@@ -331,7 +357,8 @@ KLexp1 |>
   labs(
     x = "x (corresponds to loss level)",
     y = "Mean Evaluation of Causal Claim",
-    fill = "Causal claim kind"
+    fill = "Causal claim kind",
+    title = "Participant data (Fig. 2. from KL (2024))"
   ) +
   theme_minimal()
 ```
@@ -339,11 +366,8 @@ KLexp1 |>
 And plotting also `low`, we get:
 
 ```{r KL-exp1-fig2-with-low}
-
-ggplot(
-  KLexp1,
-  aes(x = factor(x_val), y = participant_response, fill = claim_kind)
-) +
+KLexp1 |>
+  ggplot(aes(x = factor(x_val), y = participant_response, fill = claim_kind)) +
   stat_summary(
     fun = mean,
     geom = "col",
@@ -361,13 +385,114 @@ ggplot(
   labs(
     x = "x (corresponds to loss level)",
     y = "Mean Evaluation of Causal Claim",
-    fill = "Causal claim kind"
+    fill = "Causal claim kind",
+    title = "Participant data (Fig. 2. from KL (2024) w/ Low)"
   ) +
   theme_minimal()
 ```
+
+And we can visualise predictions from the various measures:
+```{r}
+KL_finest_plot <- KLexp1 |>
+  ggplot(aes(x = factor(x_val), y = KL_finest_CS, fill = claim_kind)) +
+  stat_summary(
+    fun = mean,
+    geom = "col",
+    width = 0.6,
+    position = position_dodge(width = 0.7)
+  ) +
+  # scale_y_continuous(breaks = 0:3) +
+  # coord_cartesian(ylim = c(0, 3)) +
+  labs(
+    x = "x (corresponds to loss level)",
+    y = "CS",
+    fill = "Causal claim kind",
+    title = "Predictions from KL_finest_CS"
+  ) +
+  theme_minimal()
+
+KL_one_vs_rest_plot <- KLexp1 |>
+  ggplot(aes(x = factor(x_val), y = KL_one_vs_rest_CS, fill = claim_kind)) +
+  stat_summary(
+    fun = mean,
+    geom = "col",
+    width = 0.6,
+    position = position_dodge(width = 0.7)
+  ) +
+  # scale_y_continuous(breaks = 0:3) +
+  # coord_cartesian(ylim = c(0, 3)) +
+  labs(
+    x = "x (corresponds to loss level)",
+    y = "CS",
+    fill = "Causal claim kind",
+    title = "Predictions from KL_one_vs_rest_CS"
+  ) +
+  theme_minimal()
+
+
+MF_plot <- KLexp1 |>
+  ggplot(aes(x = factor(x_val), y = MF_CS, fill = claim_kind)) +
+  stat_summary(
+    fun = mean,
+    geom = "col",
+    width = 0.6,
+    position = position_dodge(width = 0.7)
+  ) +
+  # scale_y_continuous(breaks = 0:3) +
+  # coord_cartesian(ylim = c(0, 3)) +
+  labs(
+    x = "x (corresponds to loss level)",
+    y = "CS",
+    fill = "Causal claim kind",
+    title = paste0(
+      "Predictions from MF_CS  (weights: one_vs_rest ",
+      toString(MF_weights[1]),
+      ", finest ",
+      toString(MF_weights[2]),
+      ")"
+    )
+  ) +
+  theme_minimal()
+
+(KL_finest_plot /
+  KL_one_vs_rest_plot /
+  MF_plot) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+```
+
 
 TODOs:
 
 - add other measures
 - fit cumulative logistic regression
 - compare model fit
+
+
+### Fitting cumulative logistic regression
+
+
+```{r fit-setup}
+factor_response <- function(data) {
+  data |>
+    mutate(
+      participant_response = factor(
+        participant_response,
+        levels = -3:3,
+        ordered = TRUE
+      )
+    )
+}
+```
+
+```{r}
+# fit_KL_finest <- brm(
+#   participant_response ~ claim_kind * KL_finest_CS + (1 | pid),
+#   data = factor_response(KLexp1),
+#   family = cumulative()
+# )
+# fit_KL_one_vs_rest <- NULL
+# fit_MF <- NULL
+```
+
+
