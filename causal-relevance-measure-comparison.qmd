@@ -351,30 +351,33 @@ low_vs_rest <- c(2, 1, 2, 2)
 
 KLexp1 <- KLexp1 |>
   mutate(
-    KL_finest_CS = map2_dbl(x_val, claim_kind, \(x, k) {
+    KL_finest_CS = map2_dbl(x_val, as.character(claim_kind), \(x, k) {
       grouping <- switch(
         k,
         Comp = compressed_grouping,
         High = finest_grouping,
-        finest_grouping
+        Low = finest_grouping,
+        stop("unexpected claim_kind: ", k)
       )
       KL_CS(c(x / 100, .7, .01, .01), grouping)
     }),
-    KL_one_vs_rest_CS = map2_dbl(x_val, claim_kind, \(x, k) {
+    KL_one_vs_rest_CS = map2_dbl(x_val, as.character(claim_kind), \(x, k) {
       grouping <- switch(
         k,
         Comp = compressed_grouping,
         High = high_vs_rest,
-        low_vs_rest
+        Low = low_vs_rest,
+        stop("unexpected claim_kind: ", k)
       )
       KL_CS(c(x / 100, .7, .01, .01), grouping)
     }),
-    MF_CS = map2_dbl(x_val, claim_kind, \(x, k) {
+    MF_CS = map2_dbl(x_val, as.character(claim_kind), \(x, k) {
       grouping_list <- switch(
         k,
-        omp = list(compressed_grouping),
+        Comp = list(compressed_grouping),
         High = list(high_vs_rest, finest_grouping),
-        list(low_vs_rest, finest_grouping)
+        Low = list(low_vs_rest, finest_grouping),
+        stop("unexpected claim_kind: ", k)
       )
       MF_CS(c(x / 100, .7, .01, .01), grouping_list, MF_weights)
     })
@@ -528,41 +531,44 @@ KLexp1 <- KLexp1 |>
 **KL finest**
 
 ```{r fit-kl-finest}
-fit_KL_finest <- brm(
+exp1_fit_KL_finest <- brm(
   participant_response ~ KL_finest_CS + (1 | pid),
   data = KLexp1,
-  family = cumulative(), save_pars = save_pars(all = TRUE),
-  file = "models/fit_KL_finest",
+  family = cumulative(),
+  save_pars = save_pars(all = TRUE),
+  file = "models/exp1_fit_KL_finest",
   file_refit = "on_change"
 )
-summary(fit_KL_finest)
+summary(exp1_fit_KL_finest)
 ```
 
 **KL one-vs-rest**
 
 ```{r fit-kl-one-vs-rest}
-fit_KL_one_vs_rest <- brm(
+exp1_fit_KL_one_vs_rest <- brm(
   participant_response ~ KL_one_vs_rest_CS + (1 | pid),
   data = KLexp1,
-  family = cumulative(), save_pars = save_pars(all = TRUE),
-  file = "models/fit_KL_one_vs_rest",
+  family = cumulative(),
+  save_pars = save_pars(all = TRUE),
+  file = "models/exp1_fit_KL_one_vs_rest",
   file_refit = "on_change"
 )
-summary(fit_KL_one_vs_rest)
+summary(exp1_fit_KL_one_vs_rest)
 ```
 
 **MF (combination)**
 
 ```{r fit-kl-both}
 # without set p
-fit_MF <- brm(
+exp1_fit_MF <- brm(
   participant_response ~ KL_finest_CS + KL_one_vs_rest_CS + (1 | pid),
   data = KLexp1,
-  family = cumulative(), save_pars = save_pars(all = TRUE),
-  file = "models/fit_MF",
+  family = cumulative(),
+  save_pars = save_pars(all = TRUE),
+  file = "models/exp1_fit_MF",
   file_refit = "on_change"
 )
-summary(fit_MF)
+summary(exp1_fit_MF)
 ```
 
 </details>
@@ -570,11 +576,35 @@ summary(fit_MF)
 #### Model comparison (LOO-CV)
 
 ```{r loo-comparison}
+if (is.null(exp1_fit_KL_finest$criteria$loo)) {
+  exp1_fit_KL_finest <- add_criterion(
+    exp1_fit_KL_finest,
+    "loo",
+    moment_match = TRUE,
+    file = "models/exp1_fit_KL_finest"
+  )
+}
+if (is.null(exp1_fit_KL_one_vs_rest$criteria$loo)) {
+  exp1_fit_KL_one_vs_rest <- add_criterion(
+    exp1_fit_KL_one_vs_rest,
+    "loo",
+    moment_match = TRUE,
+    file = "models/exp1_fit_KL_one_vs_rest"
+  )
+}
+if (is.null(exp1_fit_MF$criteria$loo)) {
+  exp1_fit_MF <- add_criterion(
+    exp1_fit_MF,
+    "loo",
+    moment_match = TRUE,
+    file = "models/exp1_fit_MF"
+  )
+}
 
-loos <- list(
-  KL_finest = loo(fit_KL_finest, moment_match = TRUE),
-  KL_one_vs_rest = loo(fit_KL_one_vs_rest, moment_match = TRUE),
-  MF = loo(fit_MF, moment_match = TRUE)
+exp1_loos <- list(
+  KL_finest = exp1_fit_KL_finest$criteria$loo,
+  KL_one_vs_rest = exp1_fit_KL_one_vs_rest$criteria$loo,
+  MF = exp1_fit_MF$criteria$loo
 )
 
 # for (nm in names(loos)) {
@@ -584,18 +614,18 @@ loos <- list(
 
 # sapply(loos, function(l) sum(pareto_k_values(l) > 0.7))
 
-loo_comp <- loo_compare(loos)
-loo_comp
+exp1_loo_comp <- loo_compare(exp1_loos)
+exp1_loo_comp
 ```
 
 **Lambert's z-test**
 ```{r lambert}
 #| code-fold: false
-1 - pnorm(-loo_comp[2, 1], loo_comp[2, 2])
-1 - pnorm(-loo_comp[3, 1], loo_comp[3, 2])
+1 - pnorm(-exp1_loo_comp[2, 1], exp1_loo_comp[2, 2])
+1 - pnorm(-exp1_loo_comp[3, 1], exp1_loo_comp[3, 2])
 ```
 
-The model comparison suggests that we have a much better model fit using $CS_{MF}$ than $CS_{KL}$ with the finest representation.
+**Results:** The model comparison suggests that we have a much better model fit using $CS_{MF}$ than $CS_{KL}$ with either of the two representations. Notably, fit of $CS_{KL}$ with the `finest` representation is the worst of the three.
 
 ### Fitting cumulative logistic regression - No-low test
 As an experiment, we also fit all the previous models to a dataset that does not contain *Low* sentences to match how how Fig. 2. in the original paper is ommitting them in the plot.
@@ -611,38 +641,41 @@ KLexp1_no_low <- KLexp1 |>
 
 **KL finest**
 ```{r fit-kl-finest-no-low}
-fit_KL_finest_no_low <- brm(
+exp1_fit_KL_finest_no_low <- brm(
   participant_response ~ KL_finest_CS + (1 | pid),
   data = KLexp1_no_low,
-  family = cumulative(), save_pars = save_pars(all = TRUE),
-  file = "models/fit_KL_finest_no_low",
+  family = cumulative(),
+  save_pars = save_pars(all = TRUE),
+  file = "models/exp1_fit_KL_finest_no_low",
   file_refit = "on_change"
 )
-summary(fit_KL_finest_no_low)
+summary(exp1_fit_KL_finest_no_low)
 ```
 
 **KL one-vs-rest**
 ```{r fit-kl-one-vs-rest-no-low}
-fit_KL_one_vs_rest_no_low <- brm(
+exp1_fit_KL_one_vs_rest_no_low <- brm(
   participant_response ~ KL_one_vs_rest_CS + (1 | pid),
   data = KLexp1_no_low,
-  family = cumulative(), save_pars = save_pars(all = TRUE),
-  file = "models/fit_KL_one_vs_rest_no_low",
+  family = cumulative(),
+  save_pars = save_pars(all = TRUE),
+  file = "models/exp1_fit_KL_one_vs_rest_no_low",
   file_refit = "on_change"
 )
-summary(fit_KL_one_vs_rest_no_low)
+summary(exp1_fit_KL_one_vs_rest_no_low)
 ```
 
 **MF (combination)**
 ```{r fit-kl-both-no-low}
-fit_MF_no_low <- brm(
+exp1_fit_MF_no_low <- brm(
   participant_response ~ KL_finest_CS + KL_one_vs_rest_CS + (1 | pid),
   data = KLexp1_no_low,
-  family = cumulative(), save_pars = save_pars(all = TRUE),
-  file = "models/fit_MF_no_low",
+  family = cumulative(),
+  save_pars = save_pars(all = TRUE),
+  file = "models/exp1_fit_MF_no_low",
   file_refit = "on_change"
 )
-summary(fit_MF_no_low)
+summary(exp1_fit_MF_no_low)
 ```
 
 </details>
@@ -650,11 +683,34 @@ summary(fit_MF_no_low)
 #### Model comparison (LOO-CV)
 
 ```{r loo-comparison-no-low}
-
+if (is.null(exp1_fit_KL_finest_no_low$criteria$loo)) {
+  exp1_fit_KL_finest_no_low <- add_criterion(
+    exp1_fit_KL_finest_no_low,
+    "loo",
+    moment_match = TRUE,
+    file = "models/exp1_fit_KL_finest_no_low"
+  )
+}
+if (is.null(exp1_fit_KL_one_vs_rest_no_low$criteria$loo)) {
+  exp1_fit_KL_one_vs_rest_no_low <- add_criterion(
+    exp1_fit_KL_one_vs_rest_no_low,
+    "loo",
+    moment_match = TRUE,
+    file = "models/exp1_fit_KL_one_vs_rest_no_low"
+  )
+}
+if (is.null(exp1_fit_MF_no_low$criteria$loo)) {
+  exp1_fit_MF_no_low <- add_criterion(
+    exp1_fit_MF_no_low,
+    "loo",
+    moment_match = TRUE,
+    file = "models/exp1_fit_MF_no_low"
+  )
+}
 loos_no_low <- list(
-  KL_finest_no_low = loo(fit_KL_finest_no_low, moment_match = TRUE),
-  KL_one_vs_rest_no_low = loo(fit_KL_one_vs_rest_no_low, moment_match = TRUE),
-  MF_no_low = loo(fit_MF_no_low, moment_match = TRUE)
+  KL_finest_no_low = exp1_fit_KL_finest_no_low$criteria$loo,
+  KL_one_vs_rest_no_low = exp1_fit_KL_one_vs_rest_no_low$criteria$loo,
+  MF_no_low = exp1_fit_MF_no_low$criteria$loo
 )
 
 # for (nm in names(loos)) {
@@ -676,6 +732,526 @@ loos_no_low
 ```
 
 
-We can see that when we omit the datapoints for *Low*, like in Fig. 2., $CS_{KL}$ with the finest representation fits the data similarly well as $CS_{MF}$ based on the model comparison. Here, the $CS_{KL}$ with one_vs_rest representation is a significantly worse fit.
+**Results:** We can see that when we omit the datapoints for *Low* (like it is presented in Fig. 2.), based on this model comparison, $CS_{KL}$ with the `finest` representation fits the data similarly well as $CS_{MF}$. Here, the $CS_{KL}$ with `one_vs_rest` representation is a much worse fit.
+
+## Experiment 2
+
+We repeat the same steps to compare the measures on data from KL's Experiment 2, which differed from Experiment 1 thusly:
+
+1. participants evaluated *Compressed* and only after that were they asked to also evaluate *High* and *Low*,
+2. sentence b) in both descriptions had 55% instead of 70%,
+3. value of x was set to 55,05, or 98 instead of 70, 85, 98.
+
+Table below is an overview of the measures applied to High and Low in Experiment 2.
+
+```{r overview-table-2}
+probs_55 <- c(.55, .55, .01, .01)
+probs_85 <- c(.85, .55, .01, .01)
+probs_98 <- c(.98, .55, .01, .01)
 
 
+finest_grouping <- c(1, 2, 3, 4)
+one_vs_rest_grouping <- c(1, 2, 2, 2)
+compressed_grouping <- c(1, 1, 2, 2)
+
+p <- .1
+MF_weights <- c(p, 1 - p)
+# MF_weights <- c(1,1)
+results <- tibble(
+  x = c("55", "85", "98"),
+  'KL_finest_CS' = c(
+    KL_CS(probs_55, finest_grouping) |> round(2),
+    KL_CS(probs_85, finest_grouping) |> round(2),
+    KL_CS(probs_98, finest_grouping) |> round(2)
+  ),
+  'KL_one_vs_rest_CS' = c(
+    KL_CS(probs_55, one_vs_rest_grouping) |> round(2),
+    KL_CS(probs_85, one_vs_rest_grouping) |> round(2),
+    KL_CS(probs_98, one_vs_rest_grouping) |> round(2)
+  ),
+  'KL_compressed_CS' = c(
+    KL_CS(probs_55, compressed_grouping) |> round(2),
+    KL_CS(probs_85, compressed_grouping) |> round(2),
+    KL_CS(probs_98, compressed_grouping) |> round(2)
+  ),
+  'KL_finest_CS - KL_compressed_CS' = c(
+    KL_CS(probs_55, finest_grouping, compressed_grouping) |> round(2),
+    KL_CS(probs_85, finest_grouping, compressed_grouping) |> round(2),
+    KL_CS(probs_98, finest_grouping, compressed_grouping) |> round(2)
+  ),
+  'KL_one_vs_rest_CS - KL_compressed_CS' = c(
+    KL_CS(probs_55, one_vs_rest_grouping, compressed_grouping) |> round(2),
+    KL_CS(probs_85, one_vs_rest_grouping, compressed_grouping) |> round(2),
+    KL_CS(probs_98, one_vs_rest_grouping, compressed_grouping) |> round(2)
+  ),
+  'MF_CS (weights: one_vs_rest {toString(MF_weights[1])}, finest {toString(MF_weights[2])})' := c(
+    MF_CS(probs_55, list(one_vs_rest_grouping, finest_grouping), MF_weights) |>
+      round(2),
+    MF_CS(probs_85, list(one_vs_rest_grouping, finest_grouping), MF_weights) |>
+      round(2),
+    MF_CS(probs_98, list(one_vs_rest_grouping, finest_grouping), MF_weights) |>
+      round(2)
+  ),
+  'MF_compressed_CS (weights: one_vs_rest {toString(MF_weights[1])}, finest {toString(MF_weights[2])})' := c(
+    MF_CS(probs_55, list(compressed_grouping)) |> round(2),
+    MF_CS(probs_85, list(compressed_grouping)) |> round(2),
+    MF_CS(probs_98, list(compressed_grouping)) |> round(2)
+  )
+)
+
+results |>
+  column_to_rownames("x") |>
+  t() |>
+  kable()
+```
+
+We first wrangle the data from Experiment 2 and initialise `KLexp2` with columns as in `KLexp1`.
+
+```{r KL-exp2-wrangling}
+#| code-summary: "Data Wrangling"
+
+rawexp2 <- read_csv(
+  "KinneyLombrozo2024/Data/study_2_data.csv",
+  col_types = cols(.default = col_character())
+)
+
+# glue('Raw data: {nrow(rawexp2)} rows, {ncol(rawexp2)} columns.')
+
+# Drop the two Qualtrics label rows (question text and ImportId).
+KLexp2df <- rawexp2 |> slice(-(1:2))
+
+# Keep only participants who passed the comprehension check for their
+# vignette. (%in% treats NA as a non-match, mirroring the original logic.)
+#
+# NOTE — bug fix: the original notebook looped over `range(2, len(data))`
+# AFTER dropping two rows, so the final two participants in the file were
+# never checked and were retained regardless of their comprehension-check
+# answers. Here every participant is checked. If those last two rows
+# happened to fail the check, sample sizes will differ slightly from the
+# original output.
+KLexp2df <- KLexp2df |>
+  filter(
+    D_CompCheck %in%
+      "Drol" |
+      B_CompCheck %in% "Bricofly" |
+      C_CompCheck %in% "Chapagite"
+  )
+
+# glue('After comprehension check: {nrow(KLexp2df)} rows, {ncol(KLexp2df)} columns.')
+
+# Remove all data from participants who rated any of the poor ("Bad")
+# causal claims positively (i.e., gave a rating of 0, 1, 2, or 3).
+# This replaces the original notebook's 54 near-identical filtering loops.
+# As in the original, missing values do not trigger exclusion.
+bad_cols <- grep(
+  "^[BCD]_(Prop|Stab)(Comp|High|Low)Bad(55|85|98)_1$",
+  names(KLexp2df),
+  value = TRUE
+)
+stopifnot(length(bad_cols) == 54)
+
+KLexp2df <- KLexp2df |>
+  filter(!if_any(all_of(bad_cols), \(x) x %in% c("0", "1", "2", "3"))) |>
+  mutate(pid = row_number())
+
+# glue('After bad claim filtering: {nrow(KLexp2df)} rows, {ncol(KLexp2df)} columns.')
+
+exp_cols <- grep("^[BCD]_(Prop|Stab)", names(KLexp2df), value = TRUE)
+
+KLexp2_long <- KLexp2df |>
+  pivot_longer(
+    all_of(exp_cols),
+    names_to = c(
+      "prefix",
+      "compression_kind",
+      "claim_kind",
+      "claim_valence",
+      "x_val"
+    ),
+    names_pattern = "^([BCD])_(Prop|Stab)(Comp|High|Low)(Good|Bad)(55|85|98)_1$",
+    names_transform = list(x_val = as.integer, rating = as.integer),
+    values_to = "rating",
+    values_transform = list(rating = as.integer),
+    values_drop_na = TRUE
+  )
+
+KLexp2 <- KLexp2_long |>
+  filter(claim_valence == "Good") |>
+  rename(
+    vignette = Vignette,
+    participant_response = rating
+  ) |>
+  mutate(
+    compression_kind = factor(compression_kind, levels = c("Prop", "Stab")),
+    claim_kind = factor(claim_kind, levels = c("Comp", "High", "Low")),
+    pid = factor(pid)
+  ) |>
+  select(
+    pid,
+    vignette,
+    compression_kind,
+    claim_kind,
+    x_val,
+    participant_response
+  )
+
+
+high_vs_rest <- c(1, 2, 2, 2)
+low_vs_rest <- c(2, 1, 2, 2)
+
+KLexp2 <- KLexp2 |>
+  mutate(
+    KL_finest_CS = map2_dbl(x_val, as.character(claim_kind), \(x, k) {
+      grouping <- switch(
+        k,
+        Comp = compressed_grouping,
+        High = finest_grouping,
+        Low = finest_grouping,
+        stop("unexpected claim_kind: ", k)
+      )
+      KL_CS(c(x / 100, .55, .01, .01), grouping)
+    }),
+    KL_one_vs_rest_CS = map2_dbl(x_val, as.character(claim_kind), \(x, k) {
+      grouping <- switch(
+        k,
+        Comp = compressed_grouping,
+        High = high_vs_rest,
+        Low = low_vs_rest,
+        stop("unexpected claim_kind: ", k)
+      )
+      KL_CS(c(x / 100, .55, .01, .01), grouping)
+    }),
+    MF_CS = map2_dbl(x_val, as.character(claim_kind), \(x, k) {
+      grouping_list <- switch(
+        k,
+        Comp = list(compressed_grouping),
+        High = list(high_vs_rest, finest_grouping),
+        Low = list(low_vs_rest, finest_grouping),
+        stop("unexpected claim_kind: ", k)
+      )
+      MF_CS(c(x / 100, .55, .01, .01), grouping_list, MF_weights)
+    })
+  )
+
+glimpse(KLexp2)
+```
+
+We can visualise the data (with low included):
+
+```{r KL-exp2-fig2-with-low}
+KLexp2 |>
+  ggplot(aes(x = factor(x_val), y = participant_response, fill = claim_kind)) +
+  stat_summary(
+    fun = mean,
+    geom = "col",
+    width = 0.6,
+    position = position_dodge(width = 0.7)
+  ) +
+  stat_summary(
+    fun.data = mean_se,
+    geom = "errorbar",
+    width = 0.2,
+    position = position_dodge(width = 0.7)
+  ) +
+  scale_y_continuous(breaks = 0:3) +
+  coord_cartesian(ylim = c(0, 3)) +
+  labs(
+    x = "x (corresponds to loss level)",
+    y = "Mean Evaluation of Causal Claim",
+    fill = "Causal claim kind",
+    title = "Participant data (Fig. 2. from KL (2024) w/ Low)"
+  ) +
+  theme_minimal()
+```
+
+And we can visualise output values from the various CS variants:
+
+```{r outputs-plot-2}
+#| fig-height: 10
+KL_finest_plot <- KLexp2 |>
+  ggplot(aes(x = factor(x_val), y = KL_finest_CS, fill = claim_kind)) +
+  stat_summary(
+    fun = mean,
+    geom = "col",
+    width = 0.6,
+    position = position_dodge(width = 0.7)
+  ) +
+  # scale_y_continuous(breaks = 0:3) +
+  # coord_cartesian(ylim = c(0, 3)) +
+  labs(
+    x = "x (corresponds to loss level)",
+    y = "CS",
+    fill = "Causal claim kind",
+    title = "Values from KL_finest_CS"
+  ) +
+  theme_minimal()
+
+KL_one_vs_rest_plot <- KLexp2 |>
+  ggplot(aes(x = factor(x_val), y = KL_one_vs_rest_CS, fill = claim_kind)) +
+  stat_summary(
+    fun = mean,
+    geom = "col",
+    width = 0.6,
+    position = position_dodge(width = 0.7)
+  ) +
+  # scale_y_continuous(breaks = 0:3) +
+  # coord_cartesian(ylim = c(0, 3)) +
+  labs(
+    x = "x (corresponds to loss level)",
+    y = "CS",
+    fill = "Causal claim kind",
+    title = "Values from KL_one_vs_rest_CS"
+  ) +
+  theme_minimal()
+
+
+MF_plot <- KLexp2 |>
+  ggplot(aes(x = factor(x_val), y = MF_CS, fill = claim_kind)) +
+  stat_summary(
+    fun = mean,
+    geom = "col",
+    width = 0.6,
+    position = position_dodge(width = 0.7)
+  ) +
+  # scale_y_continuous(breaks = 0:3) +
+  # coord_cartesian(ylim = c(0, 3)) +
+  labs(
+    x = "x (corresponds to loss level)",
+    y = "CS",
+    fill = "Causal claim kind",
+    title = paste0(
+      "Values from MF_CS  (weights: one_vs_rest ",
+      toString(MF_weights[1]),
+      ", finest ",
+      toString(MF_weights[2]),
+      ")"
+    )
+  ) +
+  theme_minimal()
+
+(KL_finest_plot /
+  KL_one_vs_rest_plot /
+  MF_plot) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+```
+
+### Fitting cumulative logistic regression
+
+```{r fit-setup-2}
+#| code-summary: "Setup"
+KLexp2 <- KLexp2 |>
+  mutate(
+    participant_response = ordered(participant_response, levels = -3:3),
+    x_val = factor(x_val)
+  )
+```
+
+<details>
+<summary>See model fits</summary>
+
+**KL finest**
+
+```{r fit-kl-finest-2}
+exp2_fit_KL_finest <- brm(
+  participant_response ~ KL_finest_CS + (1 | pid),
+  data = KLexp2,
+  family = cumulative(),
+  save_pars = save_pars(all = TRUE),
+  file = "models/exp2_fit_KL_finest",
+  file_refit = "on_change"
+)
+summary(exp2_fit_KL_finest)
+```
+
+**KL one-vs-rest**
+
+```{r fit-kl-one-vs-rest-2}
+exp2_fit_KL_one_vs_rest <- brm(
+  participant_response ~ KL_one_vs_rest_CS + (1 | pid),
+  data = KLexp2,
+  family = cumulative(),
+  save_pars = save_pars(all = TRUE),
+  file = "models/exp2_fit_KL_one_vs_rest",
+  file_refit = "on_change"
+)
+summary(exp2_fit_KL_one_vs_rest)
+```
+
+**MF (combination)**
+
+```{r fit-kl-both-2}
+# without set p
+exp2_fit_MF <- brm(
+  participant_response ~ KL_finest_CS + KL_one_vs_rest_CS + (1 | pid),
+  data = KLexp2,
+  family = cumulative(),
+  save_pars = save_pars(all = TRUE),
+  file = "models/exp2_fit_MF",
+  file_refit = "on_change"
+)
+summary(exp2_fit_MF)
+```
+
+</details>
+
+#### Model comparison (LOO-CV)
+
+```{r loo-comparison-2}
+if (is.null(exp2_fit_KL_finest$criteria$loo)) {
+  exp2_fit_KL_finest <- add_criterion(
+    exp2_fit_KL_finest,
+    "loo",
+    moment_match = TRUE,
+    file = "models/exp2_fit_KL_finest"
+  )
+}
+if (is.null(exp2_fit_KL_one_vs_rest$criteria$loo)) {
+  exp2_fit_KL_one_vs_rest <- add_criterion(
+    exp2_fit_KL_one_vs_rest,
+    "loo",
+    moment_match = TRUE,
+    file = "models/exp2_fit_KL_one_vs_rest"
+  )
+}
+if (is.null(exp2_fit_MF$criteria$loo)) {
+  exp2_fit_MF <- add_criterion(
+    exp2_fit_MF,
+    "loo",
+    moment_match = TRUE,
+    file = "models/exp2_fit_MF"
+  )
+}
+
+loos <- list(
+  KL_finest = exp2_fit_KL_finest$criteria$loo,
+  KL_one_vs_rest = exp2_fit_KL_one_vs_rest$criteria$loo,
+  MF = exp2_fit_MF$criteria$loo
+)
+
+# for (nm in names(loos)) {
+#   cat("\n---", nm, "---\n")
+#   print(pareto_k_table(loos[[nm]]))
+# }
+
+# sapply(loos, function(l) sum(pareto_k_values(l) > 0.7))
+
+exp2_loo_comp <- loo_compare(loos)
+exp2_loo_comp
+```
+
+**Lambert's z-test**
+```{r lambert-2}
+#| code-fold: false
+1 - pnorm(-exp2_loo_comp[2, 1], exp2_loo_comp[2, 2])
+1 - pnorm(-exp2_loo_comp[3, 1], exp2_loo_comp[3, 2])
+```
+
+**Results:** The model comparison suggests that we have a much better model fit using $CS_{MF}$ than $CS_{KL}$ with either of the two representations. Once again, fit of $CS_{KL}$ with the `finest` representation is the worst of the three.
+
+### Fitting cumulative logistic regression - No-low test
+As an experiment, we also fit all the previous models to a dataset that does not contain *Low* sentences to match how how Fig. 2. in the original paper is ommitting them in the plot.
+
+```{r fit-no-low-setup-2}
+#| code-summary: "Setup"
+KLexp2_no_low <- KLexp2 |>
+  filter(claim_kind != 'Low')
+```
+
+<details>
+<summary>See model fits</summary>
+
+**KL finest**
+```{r fit-kl-finest-no-low-2}
+exp2_fit_KL_finest_no_low <- brm(
+  participant_response ~ KL_finest_CS + (1 | pid),
+  data = KLexp2_no_low,
+  family = cumulative(),
+  save_pars = save_pars(all = TRUE),
+  file = "models/exp2_fit_KL_finest_no_low",
+  file_refit = "on_change"
+)
+summary(exp2_fit_KL_finest_no_low)
+```
+
+**KL one-vs-rest**
+```{r fit-kl-one-vs-rest-no-low-2}
+exp2_fit_KL_one_vs_rest_no_low <- brm(
+  participant_response ~ KL_one_vs_rest_CS + (1 | pid),
+  data = KLexp2_no_low,
+  family = cumulative(),
+  save_pars = save_pars(all = TRUE),
+  file = "models/exp2_fit_KL_one_vs_rest_no_low",
+  file_refit = "on_change"
+)
+summary(exp2_fit_KL_one_vs_rest_no_low)
+```
+
+**MF (combination)**
+```{r fit-kl-both-no-low-2}
+exp2_fit_MF_no_low <- brm(
+  participant_response ~ KL_finest_CS + KL_one_vs_rest_CS + (1 | pid),
+  data = KLexp2_no_low,
+  family = cumulative(),
+  save_pars = save_pars(all = TRUE),
+  file = "models/exp2_fit_MF_no_low",
+  file_refit = "on_change"
+)
+summary(exp2_fit_MF_no_low)
+```
+
+</details>
+
+#### Model comparison (LOO-CV)
+
+```{r loo-comparison-no-low-2}
+if (is.null(exp2_fit_KL_finest_no_low$criteria$loo)) {
+  exp2_fit_KL_finest_no_low <- add_criterion(
+    exp2_fit_KL_finest_no_low,
+    "loo",
+    moment_match = TRUE,
+    file = "models/exp2_fit_KL_finest_no_low"
+  )
+}
+if (is.null(exp2_fit_KL_one_vs_rest_no_low$criteria$loo)) {
+  exp2_fit_KL_one_vs_rest_no_low <- add_criterion(
+    exp2_fit_KL_one_vs_rest_no_low,
+    "loo",
+    moment_match = TRUE,
+    file = "models/exp2_fit_KL_one_vs_rest_no_low"
+  )
+}
+if (is.null(exp2_fit_MF_no_low$criteria$loo)) {
+  exp2_fit_MF_no_low <- add_criterion(
+    exp2_fit_MF_no_low,
+    "loo",
+    moment_match = TRUE,
+    file = "models/exp2_fit_MF_no_low"
+  )
+}
+
+exp2_loos_no_low <- list(
+  KL_finest_no_low = exp2_fit_KL_finest_no_low$criteria$loo,
+  KL_one_vs_rest_no_low = exp2_fit_KL_one_vs_rest_no_low$criteria$loo,
+  MF_no_low = exp2_fit_MF_no_low$criteria$loo
+)
+
+# for (nm in names(loos)) {
+#   cat("\n---", nm, "---\n")
+#   print(pareto_k_table(loos[[nm]]))
+# }
+
+# sapply(loos, function(l) sum(pareto_k_values(l) > 0.7))
+
+exp2_loos_no_low <- loo_compare(exp2_loos_no_low)
+exp2_loos_no_low
+```
+
+**Lambert's z-test**
+```{r lambert-no-low-2}
+#| code-fold: false
+1 - pnorm(-exp2_loos_no_low[2, 1], exp2_loos_no_low[2, 2])
+1 - pnorm(-exp2_loos_no_low[3, 1], exp2_loos_no_low[3, 2])
+```
+
+**Results:** We can see that when we omit the datapoints for *Low* (like it is presented in Fig. 3.), based on this model comparison, $CS_{KL}$ with the `finest` representation fits the data similarly well as $CS_{MF}$. Here, the $CS_{KL}$ with `one_vs_rest` representation is a much worse fit.
