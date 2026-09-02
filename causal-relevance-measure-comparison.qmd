@@ -19,6 +19,8 @@ format:
 execute:
   warning: false
   message: false
+filters:
+  - diagram
 ---
 
 ```{r imports}
@@ -54,7 +56,7 @@ scale_fill_discrete <- function(...) {
 ```
 
 
-We are exploring differnet ways to formally define **Causal Relevance**
+We are exploring different ways to formally define **Causal Relevance**
 
 $$CS(C,S)$$
 where $S$ is a sentence in context $C$.
@@ -115,7 +117,7 @@ MF_CS <- function(probs, grouping_list, weights = c(1)) {
 
 Sentence S semantically denotes a partition of subsets of a subset of variables. For example, **high** sentence from Experiment 1 below, assuming X is a four-way categorical variable, can have partitioning $$\llbracket S_{high}\rrbracket = \{\{x_1\},\{x_2\},\{x_3\},\{x_4\}\},$$ referred to as `finest` below, or
 $$\llbracket S_{high} \rrbracket = \{\{x_1\},\{x_2,x_3,x_4\}\},$$
-referred to as `one_vs_rest` below. The same goes for **low** sentences in Experiment 1, which also could be represented by either of the two partitions: $\llbracket S_{low}\rrbracket = \{\{x_1\},\{x_2\},\{x_3\},\{x_4\}\}, \llbracket S_{low} \rrbracket = \{\{x_2\},\{x_1,x_3,x_4\}\}$
+referred to as `one_vs_rest` below. The same goes for **low** sentences in Experiment 1, which also could be represented by either of the two partitions $\llbracket S_{low}\rrbracket = \{\{x_1\},\{x_2\},\{x_3\},\{x_4\}\}$ and $\llbracket S_{low} \rrbracket = \{\{x_2\},\{x_1,x_3,x_4\}\}.$
 
 The grouping arguments in `cMI`, `KL_CS`, and `MF_CS` allow us to define the desired granularity. For example, comparing `finest` and `one_vs_rest` in `KL_CS` in the $x=85$ situation gives us:
 
@@ -133,7 +135,7 @@ tibble(
 
 Kinney and Lombrozo (2024) use **only *finest* representations** in their model (see, for example, that the result for finest above corresponds to the calculation in footnote 10 in KL (2024)), meaning that for their measure it holds that $\llbracket S_{high} \llbracket = \{\{x_1\},\{x_2\},\{x_3\},\{x_4\}\} = \llbracket S_{low} \rrbracket.$
 
-- When $\llbracket S_{high} \rrbracket = \{\{x_1\},\{x_2\},\{x_3\},\{x_4\}\},$ we are putting $\{x_1\}$ up against $\{x_2\},\{x_3\},\{x_4\},$ in which case $CS(C,S_{high})$ equals:
+More concretely, when $\llbracket S_{high} \rrbracket = \{\{x_1\},\{x_2\},\{x_3\},\{x_4\}\},$ we are putting $\{x_1\}$ up against $\{x_2\},\{x_3\},\{x_4\},$ in which case $CS(C,S_{high})$ equals:
 
 ```{r}
 #| code-fold: false
@@ -141,7 +143,7 @@ Kinney and Lombrozo (2024) use **only *finest* representations** in their model 
 KL_CS(c(.85, .7, .01, .01), c(1, 2, 3, 4)) |> round(2)
 ```
 
-- When $\llbracket S_{low} \rrbracket = \{\{x_1\},\{x_2\},\{x_3\},\{x_4\}\},$ we are putting $\{x_2\}$ up against $\{x_2\},\{x_3\},\{x_4\},$ in which case $CS(C,S_{low})$ equals:
+When $\llbracket S_{low} \rrbracket = \{\{x_1\},\{x_2\},\{x_3\},\{x_4\}\},$ we are putting $\{x_2\}$ up against $\{x_2\},\{x_3\},\{x_4\},$ in which case $CS(C,S_{low})$ equals:
 
 ```{r}
 #| code-fold: false
@@ -151,9 +153,9 @@ KL_CS(c(.85, .7, .01, .01), c(1, 2, 3, 4)) |> round(2)
 
 As we can see, $CS_{KL}$ **cannot differentiate** between $S_{high}$ and $S_{low}$ **when using the *finest* representation**.
 
-However, when we switch from using the `finest` representation in $CS_{KL}$ to the `one_vs_rest` representation **the situation changes and we can differentiate between the two**!
+However, when we switch from using the `finest` representation in $CS_{KL}$ to the `one_vs_rest` representation **the situation changes and we can differentiate between the two**.
 
-- When $\llbracket S_{high} \rrbracket = \{\{x_1\},\{x_2,x_3,x_4\}\},$ we are putting $\{x_1\}$ up against $\{x_2,x_3,x_4\},$ in which case  $CS(C,S_{high})$ equals:
+When $\llbracket S_{high} \rrbracket = \{\{x_1\},\{x_2,x_3,x_4\}\},$ we are putting $\{x_1\}$ up against $\{x_2,x_3,x_4\},$ in which case  $CS(C,S_{high})$ equals:
 
 ```{r}
 #| code-fold: false
@@ -161,7 +163,7 @@ However, when we switch from using the `finest` representation in $CS_{KL}$ to t
 KL_CS(c(.85, .7, .01, .01), c(1, 2, 2, 2)) |> round(2)
 ```
 
-- When $\llbracket S_{low} \rrbracket = \{\{x_2\},\{x_1,x_3,x_4\}\},$ we are putting $\{x_2\}$ up against $\{x_1,x_3,x_4\},$ in which case  $CS(C,S_{low})$ equals:
+When $\llbracket S_{low} \rrbracket = \{\{x_2\},\{x_1,x_3,x_4\}\},$ we are putting $\{x_2\}$ up against $\{x_1,x_3,x_4\},$ in which case  $CS(C,S_{low})$ equals:
 
 ```{r}
 #| code-fold: false
@@ -170,16 +172,270 @@ KL_CS(c(.85, .7, .01, .01), c(1, 2, 1, 1)) |> round(2)
 ```
 
 
-$CS_{MF}$ combines the two representations and so for $S_{high}$, with a probabilistic weight $p$, we get:
+$CS_{MF}$ combines the two representations and so for $S_{high}$, with a probabilistic weight $p$ and we get:
 
 $$CS(C,S_{high}) = p \: cMI(\{\{x_1\},\{x_2\},\{x_3\},\{x_4\}\}, Y) + (1-p) \: cMI(\{\{x_1\},\{x_2,x_3,x_4\}\}, Y).$$
 
+# Note on causal selection models from causal cognition literature
+
+NSM and CESM are both worked out for the same kind of causal model: an unsheilded collider where the relationship between cause and effect is deterministic and cause variables have probabilistic priors.
+Our goal is to use these measures generally to assign a causal relevance value to a pair of cause and effect. For the vignettes in Kinney and Lombrozo (2024), we specifically have two situations. The model for proportionality is a simple chain with singular cause and effect variables. For stability, the model has two causes modelled separately; however, the causal claims made in this case are regarding either two values of a singular cause (proportionality) or TODO (stability).
+
+One challenge is that in their vignettes, the cause variable is not binary for the proportionality case; we instead have four values. Another challenge is that in their vignettes, the relationship between cause and effect variables is not deterministic --- for a given condition of the tank, we are given a percentage of larvae, and so the probabilities for the effect variable are conditional probabilities given by the report. This is the same assumption made for the measures based on mutual information above. Similarly, all these measures assume exogeneity (no confounding), i.e $P(y\mid do(x)) = P(y\mid x)$.
+
+The probability with which each tank condition comes about was not specified; the report simply mentioned conditional probabilities of the effect for all. We therefore assume a flat prior.
 
 
+# Necessity-sufficiency models
+
+
+## Probability of necessity and sufficiency (PNS) (Pearl, 2009)
+
+### Computing necessity and sufficiency via a probabilistic analysis of counterfactuals
+From Pearl (2009):
+
+> **Definition 9.2.1 (Probability of Necessity, PN)** \
+Let X and Y be two binary variables in a causal model M. Let x and y stand (respectively) for the propositions X = true and Y = true, and let x' and y' denote their complements.
+The probability of necessity is defined as the expression $$PN \triangleq P(y'_{x'}\mid x,y)$$
+\ \ ($B_{A}$ here is the counterfactual 'B if it were A')
+
+> **Definition 9.2.2 (Probability of Sufficiency, PS)**\
+$$PS \triangleq P(y_{x}\mid x',y')$$
+> **Lemma 9.2.6** \
+The probabilities of causation (PNS, PN, and PS) satisfy the following relationship: $$PNS = P(x,y)PN + P(x',y')PS$$
+
+---
+
+We need to figure out how to compute PN and PS given our model and the challenges highlighted above.
+
+The causal model in the proportionality cases has a cause variable *Tank Conditions (TC)* and an effect variable *Blue Wings (B)*. $TC$ has four possible values $WH,WD,CH,CD$ and the variable $B$ is binary. The report gives us the following information
+
+
+
+
+
+
+Let M be the following causal model
+```{.tikz}
+\begin{tikzpicture}[
+    every node/.style={circle, draw, line width=1pt,
+                       minimum size=1cm, inner sep=0pt},
+    >=to, line width=1pt, shorten >=0pt
+  ]
+  \node (TC) at (0,0)    {$TC$};
+  \node (B) at (0,-2)    {$B$};
+  \node (UTC) at (2,0.5)    {$U_{TC}$};
+   \node (UB) at (2,-1.5)    {$U_{B}$};
+  \draw[->] (TC) -- (B);
+  \draw[->] (UTC) -- (TC);
+  \draw[->] (UB) -- (B);
+  \draw[->] (UTC) -- (UB);
+\end{tikzpicture}
+```
+
+**TODO: U_B should somehow depend on the value of U_{TC} but this is the point where I am not sure how to implement that in the model and evaluate**
+
+$U_{TC}$ and $U_{B}$ are background variables
+
+\
+\
+We then define probabilistic model $\langle M,P(u_{TC}, u_{B}) \rangle$:
+
+$$
+\begin{array}{rcl@{\qquad}l}
+& & &(U_{TC}, U_{B})  \sim  P(u_{TC}, u_{B})\\
+TC & = & U_{TC} & (TC) \\
+B & = & f(TC, U_{B}) & (B)
+\end{array}
+$$
+
+**We cannot assume that the two background variables are independent**. Maybe then $P(u_{TC}, U_{B}) = P(u_{B}\mid u_{TC})P(u_{TC})$? We should be able to get the conditional probability from the report, and we have a flat prior.
+
+$\forall u_{TC}: P(u_{TC}) = 0.25$
+
+
+$P(u_{B}\mid u_{TC}) =
+\begin{cases}
+  x & \text{if } u_{TC} = WH,\\
+  .7 & \text{if } u_{TC} = WD,\\
+  .01 & \text{if } u_{TC} = CH,\\
+  .01 & \text{if } u_{TC} = CD.
+\end{cases}
+$
+
+The value of x corresponds to amounts of information loss and was varied between subjects in KL exp1 and exp2.
+
+
+
+I can write up the most formal process up until the point where I am stuck
+
+
+As an alternative approach I can give us the bounds which would give us an interval instead of a number. This is already an interesting result if there really is no way to get to a point result. This would mean that this measure really is not great in this situation exactly because we can't even get a point result.
+
+---
+
+
+Let $b$ stand for $B=true$, $b'$ for $B=false$. Let $wh,wd,ch,cd$ stand (respectively) for $TC=wh, TC = wd, TC=ch, TC=cd$ and let their complements be the remaining values, e.g. $wh'$ for $(TC=wd\lor TC=ch \lor TC=cd)$.
+
+To get the probability of necessity and sufficiency for warm and humid tank causing the bricofly to develop blue wings, we compute the quantities $P(b'_{wh'}\mid wh, b)$ and $P(b_{wh}\mid wh', b').$
+
+
+---
+
+Using **Thm. 7.1.7**, we evaluate $P(b'_{wh'}\mid wh, b)$ thusly:
+
+**Abduction**\
+$P(u_{TC}, u_{B})$ updates to $P(u_{TC}, u_{B}\mid wh,b)$:
+
+
+
+$$
+\begin{align*}
+P(u_{TC}, u_{B}\mid wh,b) &= \frac{P(wh,b\mid u_{TC}, u_{B})\cdot P(u_{TC}, u_{B})}{P(wh,b)} =\\
+&= \frac{P(wh,b\mid u_{TC}, u_{B})\cdot P(u_{B} \mid u_{TC})\cdot P(u_{TC}) }{P(wh,b)}\\
+&= \begin{cases}
+\frac{P(u_{B},u_{TC})\cdot P(u_{TC})}{P(wh,b)}   & \text{if } u_{B} = 1 \text{ and } u_{TC} = wh ,\\
+0 & \text{otherwise}.
+\end{cases}
+\end{align*}
+$$
+
+The last step is assuming that $P(wh,b\mid u_{TC}, u_{B})$ is always zero unless the values of u are exactly wh and b, then the probability of wh and b is one.
+<!--
+$P(u_{TC}, u{B}\mid wh,b) =
+\begin{cases}
+  todo & \text{if } ,\\
+todo & \text{if }.
+\end{cases}
+$ -->
+
+**Action**\
+Modify $M$ with $do(wh')$ to get submodel $M_{wh'}$:
+
+$$
+\begin{array}{rcl@{\qquad}l}
+& & &(U_{TC}, U_{B})  \sim  P(u_{TC}, u_{B})\\
+ & wh' & (TC) \\
+B & = & f(TC, U_{B}) & (B)
+\end{array}
+$$
+
+**Prediction**\
+Compute probability of $wh'$ in $\langle M_{wh'}, P(u_{TC}, u_{B}\mid wh, b)\rangle$
+
+equation 7.6 may be of use here
+
+---
+
+Using Thm. 7.1.7, we evaluate $P(b_{wh}\mid wh', b').$ thusly:
+
+ANALOGOUS TO ABOVE
+
+**Abduction**
+
+**Action**
+
+**Prediction**
+
+
+
+
+
+
+<!-- $$P(b,wh') = \sum_{x \in TC\setminus \{wh\}}P(b,x)$$
+
+$$P(wh') = \sum_{x \in TC\setminus \{wh\}}P(x)$$ -->
+
+### Alternative: Bounding PNS
+
+As mentioned before, work under the condition of exogeneity, which is enough for us to simply find lower and upper bounds for PNS using **Thm. 9.2.10** in Pearl (2009).
+
+> **Theorem 9.2.10**
+*Under condition of exogeneity, PNS is bounded as follows:* $$\max[0,P(y\mid x) - P(y \mid x')] \leq PNS \leq \min[P(y\mid x), P(y'\mid x')].$$
+
+We can obtain the following interval as causal score of $C_{\text{high}}$, which in our current notation corresponds to $TC=wh$:
+
+$$max\left[0,P(b\mid wh) - P(b \mid wh')\right] \leq PNS(wh,b) \leq \min \left[P(b\mid wh), P(b'\mid wh')\right]$$
+Using the definition of conditional probability:
+$$ \max\left[0,\frac{P(b,wh)}{P(wh)} - \frac{P(b,wh')}{P(wh')}\right] \leq PNS(wh,b) \leq \min\left[\frac{P(b,wh)}{P(wh)}, \frac{P(b',wh')}{P(wh')}\right]$$
+Expanding $wh'$:
+$$\max \left[0,\frac{P(b,wh)}{P(wh)} - \frac{\sum_{x \in TC\setminus wh}P(b,x)}{\sum_{x \in TC\setminus wh}P(x)} \right] \leq PNS(wh,b) \leq \min \left[\frac{P(b,wh)}{P(wh)}, \frac{\sum_{x \in TC\setminus wh} P(b',x)}{\sum_{x \in TC\setminus wh}P(x)}\right]$$
+
+Evaluating according the report (with $x = 85$):
+$$\max \left[0,\frac{0.2125}{0.25} - \frac{0.175 + 0.0025 + 0.0025}{0.25 + 0.25 + 0.25} \right] \leq PNS(wh,b) \leq \min \left[\frac{0.2125}{0.25}, \frac{0.075+ 0.2475 + 0.2475}{0.25+0.25+0.25}\right]$$
+$$0.61 \leq PNS(wh,b) \leq 0.76$$
+
+---
+
+Similarly for $C_{\text{low}}$, in current notation $TC=wd$:
+$$\max \left[0,\frac{0.175}{0.25} - \frac{0.2125 + 0.0025 + 0.0025}{0.25 + 0.25 + 0.25} \right] \leq PNS(wd,b) \leq \min \left[\frac{0.175}{0.25}, \frac{0.0375+ 0.2475 + 0.2475}{0.25+0.25+0.25}\right]$$
+Symplifying:
+$$0.41 \leq PNS(wd,b) \leq 0.71$$
+
+
+For $C_{\text{comp}}$, we get:
+
+$$max\left[0,P(b\mid w) - P(b \mid c)\right] \leq PNS(w,b) \leq \min \left[P(b\mid w), P(b'\mid c)\right]$$
+$$max\left[0,\frac{P(b,w)}{P(w)} - \frac{P(b,c)}{P(c)}\right] \leq PNS(w,b) \leq \min \left[\frac{P(b,w)}{P(w)}, \frac{P(b',c)}{P(c)}\right]$$
+$$max\left[0,\frac{0.3875}{0.5} - \frac{0.05}{0.5}\right] \leq PNS(w,b) \leq \min \left[\frac{0.3875}{0.5}, \frac{0.495}{0.5}\right]$$
+$$0.675 \leq PNS(w,b) \leq 0.775$$
+
+```{.tikz}
+\begin{tikzpicture}[x=10cm]
+% number line from 0 to 1
+\draw[->] (-0.03,0) -- (1.08,0);
+\foreach \x/\l in {0/0, 0.1/0.1, 0.2/0.2, 0.3/0.3, 0.4/0.4, 0.5/0.5,
+                   0.6/0.6, 0.7/0.7, 0.8/0.8, 0.9/0.9, 1/1}
+  \draw (\x,0.1) -- (\x,-0.1) node[below] {$\l$};
+
+% PNS(w,b)
+\draw[blue,very thick] (0.675,0.7) -- (0.775,0.7);
+\fill[blue] (0.675,0.7) circle (2.5pt);
+\fill[blue] (0.775,0.7) circle (2.5pt);
+\node[blue,above] at (0.725,0.8) {$PNS(w,b) \;(C_{\text{comp}})$};
+
+% PNS(wd,b)
+\draw[red,very thick] (0.41,1.4) -- (0.71,1.4);
+\fill[red] (0.41,1.4) circle (2.5pt);
+\fill[red] (0.71,1.4) circle (2.5pt);
+\node[red,above] at (0.56,1.5) {$PNS(wd,b) \;(C_{\text{low}})$};
+
+% PNS(wh,b)
+\draw[green!50!black,very thick] (0.61,2.1) -- (0.76,2.1);
+\fill[green!50!black] (0.61,2.1) circle (2.5pt);
+\fill[green!50!black] (0.76,2.1) circle (2.5pt);
+\node[green!50!black,above] at (0.685,2.2) {$PNS(wh,b) \;(C_{\text{high}})$};
+\end{tikzpicture}
+```
+---
+
+**To calculate a point value for PNS, we would need to additionally assume *monotonicity* (Def. 9.2.13) of variable B relative to variable TC.**
+
+With both the assumption of exogeneity of TC and monotonicity of B relative to TC, we would be able to calculate, using Thm. 9.2.14:
+$$PNS = P(y\mid x) - P(y\mid x')$$
+
+
+## Necessity-sufficiency model (NSM) (Icard et al.,2017)
+
+NSM is sampling-first.
+
+# Counterfactual effect size model (CESM) (Quillien & Lucas, 2024)
+
+
+If we, as in the previous measures, assume no-confounding, we can use correlation here.
+
+We could do a calculate straight or take a sampling approach.
 
 # Comparison: Kinney and Lombrozo (2024)
 
 ## Experiment 1
+
+
+![report](pics/KL_exp1_report.png)
+
+
+![trial](pics/KL_exp1_trial.png)
+
 
 Table below is an overview of the measures applied to High and Low in Experiment 1.
 
@@ -195,7 +451,7 @@ compressed_grouping <- c(1, 1, 2, 2)
 
 p <- .1
 MF_weights <- c(p, 1 - p)
-# MF_weights <- c(1,1)
+# MF_weights <- c(1.82,3.14)
 results <- tibble(
   x = c("70", "85", "98"),
   'KL_finest_CS' = c(
@@ -441,7 +697,9 @@ KLexp1 |>
     title = "Participant data (Fig. 2. from KL (2024) w/ Low)"
   ) +
   theme_minimal()
+KLexp1data <- KLexp1
 ```
+
 
 And we can visualise output values from the various CS variants:
 ```{r outputs-plot}
@@ -618,7 +876,7 @@ exp1_loo_comp <- loo_compare(exp1_loos)
 exp1_loo_comp
 ```
 
-**Lambert's z-test**
+**Lambert's z-score**
 ```{r lambert}
 #| code-fold: false
 1 - pnorm(-exp1_loo_comp[2, 1], exp1_loo_comp[2, 2])
@@ -724,7 +982,7 @@ loos_no_low <- loo_compare(loos_no_low)
 loos_no_low
 ```
 
-**Lambert's z-test**
+**Lambert's z-score**
 ```{r lambert-no-low}
 #| code-fold: false
 1 - pnorm(-loos_no_low[2, 1], loos_no_low[2, 2])
@@ -962,6 +1220,7 @@ KLexp2 |>
     title = "Participant data (Fig. 2. from KL (2024) w/ Low)"
   ) +
   theme_minimal()
+KLexp2data <- KLexp2
 ```
 
 And we can visualise output values from the various CS variants:
@@ -1140,7 +1399,7 @@ exp2_loo_comp <- loo_compare(loos)
 exp2_loo_comp
 ```
 
-**Lambert's z-test**
+**Lambert's z-score**
 ```{r lambert-2}
 #| code-fold: false
 1 - pnorm(-exp2_loo_comp[2, 1], exp2_loo_comp[2, 2])
@@ -1213,6 +1472,7 @@ if (is.null(exp2_fit_KL_finest_no_low$criteria$loo)) {
     file = "models/exp2_fit_KL_finest_no_low"
   )
 }
+
 if (is.null(exp2_fit_KL_one_vs_rest_no_low$criteria$loo)) {
   exp2_fit_KL_one_vs_rest_no_low <- add_criterion(
     exp2_fit_KL_one_vs_rest_no_low,
@@ -1247,7 +1507,7 @@ exp2_loos_no_low <- loo_compare(exp2_loos_no_low)
 exp2_loos_no_low
 ```
 
-**Lambert's z-test**
+**Lambert's z-score**
 ```{r lambert-no-low-2}
 #| code-fold: false
 1 - pnorm(-exp2_loos_no_low[2, 1], exp2_loos_no_low[2, 2])
@@ -1255,3 +1515,80 @@ exp2_loos_no_low
 ```
 
 **Results:** We can see that when we omit the datapoints for *Low* (like it is presented in Fig. 3.), based on this model comparison, $CS_{KL}$ with the `finest` representation fits the data similarly well as $CS_{MF}$. Here, the $CS_{KL}$ with `one_vs_rest` representation is a much worse fit.
+
+
+
+# PluralCause project intermission
+
+```{r}
+KLexp1data |>
+  ggplot(aes(x = claim_kind, y = participant_response, fill = compression_kind)) +
+  stat_summary(
+    fun = mean,
+    geom = "col",
+    width = 0.6,
+    position = position_dodge(width = 0.7)
+  ) +
+  stat_summary(
+    fun.data = mean_se,
+    geom = "errorbar",
+    width = 0.2,
+    position = position_dodge(width = 0.7)
+  ) +
+  labs(
+    # x = "x (corresponds to loss level)",
+    y = "Mean Evaluation of Causal Claim",
+    # fill = "Causal claim kind",
+    title = "Participant data (Fig. 2. from KL (2024) w/ Low)"
+  ) +
+  theme_minimal()
+
+KLexp1dataLong <- KLexp1data |>
+  select(-KL_finest_CS, -KL_one_vs_rest_CS, -MF_CS) |>
+  pivot_wider(names_from = claim_kind, values_from = participant_response) |>
+  mutate(Comp_High = Comp - High, Comp_Low = Comp - Low) |>
+  pivot_longer(
+    cols = c(Comp_High, Comp_Low),
+    names_to = 'diff',
+    values_to = 'diff_value'
+  )
+
+KLexp1dataLong |>
+  ggplot(aes(x = compression_kind, y = diff_value, fill = diff)) +
+  stat_summary(
+    fun = mean,
+    geom = "col",
+    width = 0.6,
+    position = position_dodge(width = 0.7)
+  ) +
+  stat_summary(
+    fun.data = mean_se,
+    geom = "errorbar",
+    width = 0.2,
+    position = position_dodge(width = 0.7)
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+KLexp2data |>
+  ggplot(aes(x = claim_kind, y = participant_response, fill = compression_kind)) +
+  stat_summary(
+    fun = mean,
+    geom = "col",
+    width = 0.6,
+    position = position_dodge(width = 0.7)
+  ) +
+  stat_summary(
+    fun.data = mean_se,
+    geom = "errorbar",
+    width = 0.2,
+    position = position_dodge(width = 0.7)
+  ) +
+  scale_y_continuous(breaks = 0:3) +
+  coord_cartesian(ylim = c(0, 3)) +
+
+  theme_minimal()
+```
+
