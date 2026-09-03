@@ -323,7 +323,9 @@ $$
 **Prediction**\
 Compute probability of $wh'$ in $\langle M_{wh'}, P(u_{TC}, u_{B}\mid wh, b)\rangle$
 
-equation 7.6 may be of use here
+The issue here is that we can't evaluate B deterministically in this submodel. The value is a function of TC with probabilies from the report included in U_{B}, but setting TC to wh' only gives us the conditional probabilities based on which we would sample the value of B.
+
+
 
 ---
 
@@ -337,14 +339,6 @@ ANALOGOUS TO ABOVE
 
 **Prediction**
 
-
-
-
-
-
-<!-- $$P(b,wh') = \sum_{x \in TC\setminus \{wh\}}P(b,x)$$
-
-$$P(wh') = \sum_{x \in TC\setminus \{wh\}}P(x)$$ -->
 
 ### Alternative: Bounding PNS
 
@@ -372,6 +366,7 @@ $$\max \left[0,\frac{0.175}{0.25} - \frac{0.2125 + 0.0025 + 0.0025}{0.25 + 0.25 
 Symplifying:
 $$0.41 \leq PNS(wd,b) \leq 0.71$$
 
+---
 
 For $C_{\text{comp}}$, we get:
 
@@ -415,9 +410,96 @@ With both the assumption of exogeneity of TC and monotonicity of B relative to T
 $$PNS = P(y\mid x) - P(y\mid x')$$
 
 
+
+However, sice the relationship between TC and B is not deterministic, I don't think we can assume monotonicity.
+
+
 ## Necessity-sufficiency model (NSM) (Icard et al.,2017)
 
-NSM is sampling-first.
+The measure of actual causal strength suggested by Icard et al (2007) combines *actual* necessity and *robust* sufficiency. **TODO: spell out what is the conceptual difference to necessity and sufficiency in Pearl and others: causal strength vs. actual causal strength.**
+
+- Necessity: If C were not to occur, E would also not occur.
+- Sufficiency: If C were to occur, E would also occur.
+
+- Actual Necessity: If C had not occurred, E also would not have
+occured.
+- Robust Sufficiency: Given that C occurred, E would have occurred
+even if background conditions had been slightly different.
+
+**Actual necessity**
+
+To determine actual necessity of X=x for Y=y, we determine an active path from X to Y and freeze all other variables ($\vec{Z}$) to concrete values $\vec{z}$ and then we get $p(Y\neq y \mid do(X\neq x, \vec{Z}=\vec{Z}))$.
+
+Since we have a simple chain $X\rightarrow Y$, we have no other variables in the model and so actual necessity is simply:
+
+$$P^{v}_{X\neq x}(Y\neq y) = P(Y\neq y \mid do(X\neq x)) = P(Y\neq y \mid X\neq x)$$
+
+**Robust sufficiency**
+Icard et al. (2007) mention that a particular proposal would be to intervene on X, resample all other variables and then determine whether Y has the value in question.
+
+Since we have no other variables to resample, we simply get:
+
+$$P^{\sigma}_{X=x}(Y=y) = P(Y=y\mid do(X=x)) = P(Y=y\mid X=x)$$
+
+Icard et al.'s measure of actual causal strength is then defined via a sampling algorithm which converges (as the number of samples approaches infinity) to:
+
+$$\kappa_{P}(X,Y)= P(X=0)P^{v}_{X=0}(Y=0) + P(X=1)P^{\sigma}_{X=1}(Y=1)$$
+
+---
+
+
+Back to the vignette in KL:
+
+
+For $C_{high}$ with $x=85$ we get:
+
+$$\begin{align*}
+\kappa_{P}(wh,b) &= P(wh')P(b'\mid x') + P(wh)P(b\mid wh)=\\
+&= (1-P(wh))\frac{\sum_{x\in TC\setminus wh}P(b',x)}{\sum_{x\in TC\setminus wh}P(x)} + P(wh)\frac{P(wh,b)}{P(wh)}=\\
+&= (1-P(wh))\frac{\sum_{x\in TC\setminus wh}P(b',x)}{\sum_{x\in TC\setminus wh}P(x)} + P(wh,b) =\\
+&= (1-0.25) \left(\frac{0.075+0.2475+0.2475}{0.25+0.25+0.25}\right) + 0.2125 =  0.7825
+\end{align*}$$
+
+For $C_{low}$ with $x = 85$ we get:
+
+$$\begin{align*}
+\kappa_{P}(wd,b) &= P(wd')P(b'\mid x') + P(wd)P(b\mid wd)=\\
+&= (1-P(wd))\frac{\sum_{x\in TC\setminus wd}P(b',x)}{\sum_{x\in TC\setminus wd}P(x)} + P(wd)\frac{P(wd,b)}{P(wd)}=\\
+&= (1-P(wd))\frac{\sum_{x\in TC\setminus wd}P(b',x)}{\sum_{x\in TC\setminus wd}P(x)} + P(wd,b) =\\
+&= (1-0.25) \left(\frac{0.0375+0.2475+0.2475}{0.25+0.25+0.25}\right) + 0.175 = 0.7075
+\end{align*}$$
+
+Finally, for $C_{comp}$ we get:
+
+$$\begin{align*}
+\kappa_{P}(w,b) &= P(w')P(b'\mid x') + P(w)P(b\mid w)=\\
+&= (1-P(w))\frac{\sum_{x\in TC\setminus w}P(b',x)}{\sum_{x\in TC\setminus w}P(x)} + P(w)\frac{P(w,b)}{P(w)}=\\
+&= (1-P(w))\frac{\sum_{x\in TC\setminus w}P(b',x)}{\sum_{x\in TC\setminus w}P(x)} + P(w,b) =\\
+&= (1-0.5) \left(\frac{0.495}{0.5}\right) + 0.3875 = 0.8825
+\end{align*}$$
+
+```{.tikz}
+\begin{tikzpicture}[x=10cm]
+\draw[->] (-0.03,0) -- (1.08,0);
+\foreach \x/\l in {0/0, 0.1/0.1, 0.2/0.2, 0.3/0.3, 0.4/0.4, 0.5/0.5,
+                   0.6/0.6, 0.7/0.7, 0.8/0.8, 0.9/0.9, 1/1}
+  \draw (\x,0.1) -- (\x,-0.1) node[below] {$\l$};
+\draw[red,dashed] (0.7075,0) -- (0.7075,0.7);
+\fill[red] (0.7075,0.7) circle (2.5pt);
+\node[red,anchor=south east] at (0.7175,0.75) {$\kappa_{P}(wd,b)=0.7075 \;(C_{\mathrm{low}})$};
+\draw[green!50!black,dashed] (0.7825,0) -- (0.7825,1.4);
+\fill[green!50!black] (0.7825,1.4) circle (2.5pt);
+\node[green!50!black,anchor=south east] at (0.7925,1.45) {$\kappa_{P}(wh,b)=0.7825 \;(C_{\mathrm{high}})$};
+\draw[blue,dashed] (0.8825,0) -- (0.8825,2.1);
+\fill[blue] (0.8825,2.1) circle (2.5pt);
+\node[blue,anchor=south east] at (0.8925,2.15) {$\kappa_{P}(w,b)=0.8825 \;(C_{\mathrm{comp}})$};
+\end{tikzpicture}
+```
+
+
+**NOTE: everything for PNS and NSM so far is one_vs_rest. The ordering we see here with $\kappa_{P}$ corresponds to that of $CS_{KL}$ with one_vs_rest.**
+- **TODO**: figure out whether we can also do `finest`
+- in either case, the measure would not be a mixture --- we can only work with one granularity at a time. I expected therefore that the fit will be worse than CS_{MF}.
 
 # Counterfactual effect size model (CESM) (Quillien & Lucas, 2024)
 
